@@ -42,6 +42,11 @@ Analysis analyze(Bytes data, const Context& ctx) {
     out.errors.push_back("container nesting exceeds " + std::to_string(Context::MaxDepth) + " levels");
     return out;
   }
+  if (!ctx.charge(data.size())) {
+    out.format = "Not analyzed";
+    out.errors.push_back("analysis budget exhausted; " + fmt_hex(data.size()) + " bytes left unanalyzed");
+    return out;
+  }
 
   if (const FormatHandler* h = identify(data)) {
     try {

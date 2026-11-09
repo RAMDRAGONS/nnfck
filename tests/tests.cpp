@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -151,6 +152,71 @@ void test_trailing_bytes() {
   check(nonzero.warnings.size() == 1, "non-zero trailing bytes are a warning");
 }
 
+void put_u16(std::vector<u8>& v, std::size_t at, u16 x) {
+  v[at] = static_cast<u8>(x);
+  v[at + 1] = static_cast<u8>(x >> 8);
+}
+
+void put_u32(std::vector<u8>& v, std::size_t at, u32 x) {
+  for (std::size_t i = 0; i < 4; ++i)
+    v[at + i] = static_cast<u8>(x >> (8 * i));
+}
+
+// Little-endian SARC with unnamed entries that each span `member_size` bytes of
+// zeroed data, laid out back to back after the name table.
+std::vector<u8> sarc_file(u16 count, u32 member_size, u32 data_offset_override = 0) {
+  const std::size_t fat = 0x14, entries = fat + 0xC, fnt = entries + std::size_t(count) * 0x10;
+  const u32 data_offset = data_offset_override != 0 ? data_offset_override : static_cast<u32>(fnt + 8);
+  std::vector<u8> v(std::max<std::size_t>(fnt + 8, data_offset) + std::size_t(count) * member_size);
+  std::copy_n("SARC", 4, v.begin());
+  put_u16(v, 0x4, 0x14);
+  v[0x6] = 0xFF;
+  v[0x7] = 0xFE;
+  put_u32(v, 0x8, static_cast<u32>(v.size()));
+  put_u32(v, 0xC, data_offset);
+  put_u16(v, 0x10, 0x100);
+  std::copy_n("SFAT", 4, v.begin() + static_cast<std::ptrdiff_t>(fat));
+  put_u16(v, fat + 0x4, 0xC);
+  put_u16(v, fat + 0x6, count);
+  put_u32(v, fat + 0x8, 0x65);
+  for (u16 i = 0; i < count; ++i) {
+    const std::size_t e = entries + std::size_t(i) * 0x10;
+    put_u32(v, e, i);
+    put_u32(v, e + 0x8, i * member_size);
+    put_u32(v, e + 0xC, (i + 1u) * member_size);
+  }
+  std::copy_n("SFNT", 4, v.begin() + static_cast<std::ptrdiff_t>(fnt));
+  put_u16(v, fnt + 0x4, 0x8);
+  return v;
+}
+
+void test_sarc_rejects_overlapping_data() {
+  // Data offset 0 would let members span the archive's own headers.
+  const auto file = sarc_file(1, 4, 0);
+  auto bad = file;
+  put_u32(bad, 0xC, 0);
+  const Analysis a = analyze(bad, Context{});
+  check(!a.errors.empty() && a.sections.size() == 1, "data offset inside the headers is rejected");
+  check(analyze(file, Context{}).errors.empty(), "well-formed SARC has no errors");
+}
+
+void test_budget() {
+  const auto file = sarc_file(4, 0x100);
+  Budget budget{file.size() + 0x180};
+  const Analysis a = analyze(file, Context{0, &budget});
+  std::size_t not_analyzed = 0;
+  for (const Section& s : a.sections)
+    for (const Field& f : s.fields())
+      if (f.value.find("[Not analyzed") != std::string::npos)
+        ++not_analyzed;
+  check(not_analyzed == 3, "members beyond the budget are not analyzed");
+
+  Budget tiny{0x10};
+  const auto yaz = yaz_file(0x100, {0x80, 'a', 0x00, 0x00, 0xFF});
+  const Analysis b = analyze(yaz, Context{0, &tiny});
+  check(!b.errors.empty(), "decompression beyond the budget is refused");
+}
+
 // CRC-32 (zlib polynomial) of the decoded payload, for comparison against an
 // independent decoder.
 u32 crc32(const std::vector<u8>& data) {
@@ -202,6 +268,8 @@ int main(int argc, char** argv) {
   test_expansion_limit();
   test_analysis_format_names();
   test_trailing_bytes();
+  test_sarc_rejects_overlapping_data();
+  test_budget();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";

@@ -70,7 +70,8 @@ int main(int argc, char** argv) {
       continue;
     }
 
-    const nnfck::Analysis analysis = nnfck::analyze(nnfck::Bytes(data), nnfck::Context{});
+    nnfck::Budget budget = nnfck::Budget::for_input(data.size());
+    const nnfck::Analysis analysis = nnfck::analyze(nnfck::Bytes(data), nnfck::Context{0, &budget});
     nnfck::print_analysis(std::cout, files[i], analysis);
     if (!analysis.errors.empty() && status == ExitOk)
       status = ExitParseError;

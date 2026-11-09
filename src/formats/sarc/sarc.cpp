@@ -31,7 +31,7 @@ void require_size(Analysis& out, std::string_view what, u32 actual, std::size_t 
 }
 
 std::string payload_format(Bytes file, const Context& ctx) {
-  const Analysis a = nnfck::analyze(file, Context{ctx.depth + 1});
+  const Analysis a = nnfck::analyze(file, ctx.nested());
   if (a.format == "Unknown")
     return "Unknown data";
   if (!a.errors.empty())
@@ -107,9 +107,10 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   const u16 fnt_header_size = r.u16_at(fnt + 0x4);
   require_size(out, "SFNT header", fnt_header_size, FntHeaderSize);
   const std::size_t names = fnt + fnt_header_size;
+  // Member data must not overlap the archive's own headers; loaders reject this.
   if (data_offset < names)
-    out.errors.push_back("data offset " + fmt_hex(data_offset) + " precedes the end of the SFNT header at " +
-                         fmt_hex(names));
+    throw ParseError("data offset " + fmt_hex(data_offset) + " precedes the end of the SFNT header at " +
+                     fmt_hex(names));
 
   std::vector<Entry> entries;
   entries.reserve(file_count);

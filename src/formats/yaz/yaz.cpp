@@ -172,6 +172,13 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     return;
   }
 
+  if (!ctx.charge(h.decompressed_size)) {
+    out.format = std::string(Name) + " (not decompressed)";
+    out.errors.push_back("analysis budget exhausted before decompressing " + fmt_hex(h.decompressed_size) +
+                         " bytes");
+    return;
+  }
+
   std::vector<u8> payload(h.decompressed_size);
   StreamStats st;
   try {
@@ -192,7 +199,7 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
                              " non-zero trailing bytes");
   }
 
-  Analysis inner = analyze(Bytes(payload), Context{ctx.depth + 1});
+  Analysis inner = analyze(Bytes(payload), ctx.nested());
   if (inner.format == "Unknown")
     out.format = "Sead Yaz-compressed unknown data";
   else if (inner.format == "Empty")
