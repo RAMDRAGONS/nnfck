@@ -190,6 +190,16 @@ std::vector<u8> sarc_file(u16 count, u32 member_size, u32 data_offset_override =
   return v;
 }
 
+void test_sanitize() {
+  check(sanitize("\x1B[31mred") == "\\x1B[31mred", "ESC is escaped");
+  check(sanitize("a\nb\x7F") == "a\\x0Ab\\x7F", "C0 controls and DEL are escaped");
+  check(sanitize("\xE6\x97\xA5\xE6\x9C\xAC") == "\xE6\x97\xA5\xE6\x9C\xAC", "well-formed UTF-8 is kept");
+  check(sanitize("\xC2\x9B") == "\\xC2\\x9B", "C1 control (CSI) is escaped");
+  check(sanitize("\x9B") == "\\x9B", "lone 8-bit CSI is escaped");
+  check(sanitize("\xC0\xAF") == "\\xC0\\xAF", "overlong encoding is escaped");
+  check(sanitize("\xED\xA0\x80") == "\\xED\\xA0\\x80", "surrogate is escaped");
+}
+
 void test_sarc_rejects_overlapping_data() {
   // Data offset 0 would let members span the archive's own headers.
   const auto file = sarc_file(1, 4, 0);
@@ -282,6 +292,7 @@ int main(int argc, char** argv) {
   test_expansion_limit();
   test_analysis_format_names();
   test_trailing_bytes();
+  test_sanitize();
   test_sarc_rejects_overlapping_data();
   test_budget();
   test_ptcl_overlapping_siblings();

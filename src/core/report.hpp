@@ -47,6 +47,11 @@ struct Analysis {
   void absorb(Analysis&& inner);
 };
 
+// Escapes control characters, C1 controls and malformed UTF-8 as \xNN so text
+// taken from input files cannot drive the terminal.
+std::string sanitize(std::string_view s);
+
+// Every string is passed through sanitize() on its way out.
 void print_analysis(std::ostream& out, std::string_view path, const Analysis& analysis);
 
 std::string fmt_hex(u64 value, int min_digits = 0);
