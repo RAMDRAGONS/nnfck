@@ -25,6 +25,22 @@ std::string bntx_string(const ByteReader& r, u64 at) {
   return std::string(s.begin(), s.end());
 }
 
+// The target is a space-padded four-character tag.
+std::string platform_name(Bytes tag) {
+  std::size_t length = tag.size();
+  while (length > 0 && (tag[length - 1] == ' ' || tag[length - 1] == 0))
+    --length;
+  const std::string_view text(reinterpret_cast<const char*>(tag.data()), length);
+  if (text == "NX")
+    return "Switch";
+  if (text == "Gen")
+    return "Generic";
+  for (const char c : text)
+    if (c < 0x20 || c >= 0x7F)
+      return fmt_quoted(tag);
+  return length == 0 ? fmt_quoted(tag) : std::string(text);
+}
+
 std::string count_of(u64 n, std::string_view singular) {
   return std::to_string(n) + " " + std::string(singular) + (n == 1 ? "" : "s");
 }
@@ -107,7 +123,7 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   s.add("File Size", fmt_size(file_size));
   if (name_offset != 0)
     s.add("Name", r.cstring_at(name_offset, 0x400));
-  s.add("Target Platform", fmt_quoted(platform));
+  s.add("Platform", platform_name(platform));
   s.add("Textures", std::to_string(texture_count));
 
   if (file_size != data.size())
