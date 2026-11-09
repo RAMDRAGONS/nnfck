@@ -7,13 +7,13 @@
 
 #include "formats/format.hpp"
 
-// Sead Yaz: the LZ77 variant used by Nintendo's sead library on Wii U, 3DS and
+// Yaz: the LZ77 variant used by Nintendo's sead library on Wii U, 3DS and
 // Switch. The magic's trailing digit dates back to the N64, where it told cart
 // (0) from disk (1) data; it carries no meaning here, so it is shown verbatim
 // rather than used as the format's name.
 namespace nnfck::yaz {
 
-inline constexpr std::string_view Name = "Sead Yaz";
+inline constexpr std::string_view Name = "Yaz";
 inline constexpr std::string_view Magic = "Yaz0";
 inline constexpr std::size_t HeaderSize = 0x10;
 

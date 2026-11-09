@@ -4,12 +4,15 @@
 #include <vector>
 
 #include "formats/gfx/gfx.hpp"
+#include "formats/listing.hpp"
 
 // nn::gfx texture resource files: an nn::util::BinaryFileHeader, a texture
 // container, and one BRTI block per texture.
 namespace nnfck::bntx {
 
 namespace {
+
+using listing::count_of;
 
 constexpr std::size_t HeaderSize = 0x20;
 constexpr std::size_t ContainerSize = 0x38;
@@ -39,10 +42,6 @@ std::string platform_name(Bytes tag) {
     if (c < 0x20 || c >= 0x7F)
       return fmt_quoted(tag);
   return length == 0 ? fmt_quoted(tag) : std::string(text);
-}
-
-std::string count_of(u64 n, std::string_view singular) {
-  return std::to_string(n) + " " + std::string(singular) + (n == 1 ? "" : "s");
 }
 
 // BRTI: a 16-byte block header, the texture info, then data size, alignment,

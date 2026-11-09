@@ -1,6 +1,7 @@
 #include "core/report.hpp"
 
 #include <algorithm>
+#include <charconv>
 
 namespace nnfck {
 
@@ -165,6 +166,12 @@ std::string fmt_quoted(Bytes bytes) {
 
 std::string fmt_bool(bool value) {
   return value ? "Yes" : "No";
+}
+
+std::string fmt_float(float value) {
+  char buffer[32];
+  const auto result = std::to_chars(buffer, buffer + sizeof(buffer), value);
+  return std::string(buffer, result.ptr);
 }
 
 }  // namespace nnfck

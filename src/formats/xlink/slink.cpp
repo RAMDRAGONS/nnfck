@@ -1,8 +1,11 @@
+#include "formats/listing.hpp"
 #include "formats/xlink/xlink.hpp"
 
 namespace nnfck::slink {
 
 namespace {
+
+using listing::count_of;
 
 constexpr std::size_t HeaderSize = 0x10;
 // A u32 follows each user's tables; the user header points at it.
@@ -33,10 +36,6 @@ const Layout* layout_for(u32 version) {
   return nullptr;
 }
 
-std::string count_of(u64 n, std::string_view what) {
-  return std::to_string(n) + " " + std::string(what) + (n == 1 ? "" : "s");
-}
-
 }  // namespace
 
 bool probe(Bytes data) {
@@ -49,7 +48,7 @@ bool probe(Bytes data) {
 void analyze(Bytes data, Analysis& out, const Context& ctx) {
   out.format = std::string(Name);
   ByteReader r(data, Endian::Big);
-  r.require(0, HeaderSize, "SLink header");
+  r.require(0, HeaderSize, "SoundLink header");
   if (r.u32_at(0x8) > 0xFFFF)
     r.set_endian(Endian::Little);
   const u32 file_size = r.u32_at(0x4);
@@ -65,22 +64,22 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   s.add("String Table", fmt_hex(strings));
 
   if (file_size != data.size())
-    out.warnings.push_back("SLink database declares " + fmt_hex(file_size) + " bytes but holds " +
+    out.warnings.push_back("SoundLink database declares " + fmt_hex(file_size) + " bytes but holds " +
                            fmt_hex(data.size()));
   const Layout* l = layout_for(version);
   if (l == nullptr) {
-    out.warnings.push_back("SLink version " + std::to_string(version) +
+    out.warnings.push_back("SoundLink version " + std::to_string(version) +
                            " has an unknown layout; only its header is shown");
     return;
   }
-  r.require(HeaderSize, std::size_t{user_count} * 4, "SLink user offsets");
+  r.require(HeaderSize, std::size_t{user_count} * 4, "SoundLink user offsets");
 
   // Call tables, actions, assets, action triggers.
   u64 totals[4] = {};
   std::vector<std::string> rows;
   for (u32 i = 0; i < user_count; ++i) {
     const std::size_t at = r.u32_at(HeaderSize + std::size_t{i} * 4);
-    r.require(at, l->user_header, "SLink user");
+    r.require(at, l->user_header, "SoundLink user");
     const u32 block_size = r.u32_at(at + 0x4);
     const std::string name = r.cstring_at(static_cast<std::size_t>(strings) + r.u32_at(at + 0x8), MaxNameLength);
     ctx.spend(l->user_header + name.size(), "user names");
@@ -88,10 +87,10 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     const u64 tables = l->user_header + u64{counts[0]} * l->call_table + u64{counts[1]} * l->action +
                        u64{counts[2]} * l->asset + u64{counts[3]} * l->action_trigger;
     if (block_size != tables + UserTrailerSize || r.u32_at(at + 0x1C) != tables)
-      out.errors.push_back("SLink user \"" + name + "\" spans " + fmt_hex(block_size) +
+      out.errors.push_back("SoundLink user \"" + name + "\" spans " + fmt_hex(block_size) +
                            " bytes but its tables need " + fmt_hex(tables + UserTrailerSize));
     else if (!r.has(at, block_size))
-      out.errors.push_back("SLink user \"" + name + "\" runs past the end of the file");
+      out.errors.push_back("SoundLink user \"" + name + "\" runs past the end of the file");
     for (int k = 0; k < 4; ++k)
       totals[k] += counts[k];
     if (ctx.list_members)

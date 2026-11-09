@@ -1,11 +1,14 @@
 #include <algorithm>
 #include <array>
 
-#include "formats/bfres/bfres.hpp"
 #include "formats/bntx/bntx.hpp"
 #include "formats/byml/byml.hpp"
 #include "formats/eft/eftb.hpp"
+#include "formats/eft/eset.hpp"
 #include "formats/format.hpp"
+#include "formats/fres/fres.hpp"
+#include "formats/fres/intermediate.hpp"
+#include "formats/layout/layout.hpp"
 #include "formats/sarc/sarc.hpp"
 #include "formats/xlink/xlink.hpp"
 #include "formats/yaz/yaz.hpp"
@@ -15,19 +18,29 @@ namespace nnfck {
 
 namespace {
 
-// Probes with longer or more specific signatures come first; BYML's two-byte
-// magic is the weakest check, so it runs last.
-constexpr std::array<FormatHandler, 10> Handlers = {{
-    {yaz::Name, yaz::probe, yaz::analyze},
-    {zstd::Name, zstd::probe, zstd::analyze},
-    {sarc::Name, sarc::probe, sarc::analyze},
-    {bfres::Name, bfres::probe, bfres::analyze},
-    {bntx::Name, bntx::probe, bntx::analyze},
-    {eft::Name, eft::probe, eft::analyze},
-    {xlink::Name, xlink::probe, xlink::analyze},
-    {elink::Name, elink::probe, elink::analyze},
-    {slink::Name, slink::probe, slink::analyze},
-    {byml::Name, byml::probe, byml::analyze},
+// Probes with longer or more specific signatures come first. FLIM's signature
+// sits at an offset the file's last bytes give, and BYML's two-byte magic is
+// the weakest check, so they run last.
+constexpr std::array<FormatHandler, 19> Handlers = {{
+    {yaz::Name, library::Sead, yaz::probe, yaz::analyze},
+    {zstd::Name, library::Zstandard, zstd::probe, zstd::analyze},
+    {sarc::Name, library::Sead, sarc::probe, sarc::analyze},
+    {fres::Name, library::NintendoWare, fres::probe, fres::analyze},
+    {bntx::Name, library::NintendoSDK, bntx::probe, bntx::analyze},
+    {flyt::Name, library::NintendoWare, flyt::probe, flyt::analyze},
+    {flan::Name, library::NintendoWare, flan::probe, flan::analyze},
+    {fcpx::Name, library::NintendoWare, fcpx::probe, fcpx::analyze},
+    {eft::Name, library::NintendoWare, eft::probe, eft::analyze},
+    {xlink::Name, library::XLink2, xlink::probe, xlink::analyze},
+    {elink::Name, library::EffectLink, elink::probe, elink::analyze},
+    {slink::Name, library::SoundLink, slink::probe, slink::analyze},
+    {flim::Name, library::NintendoWare, flim::probe, flim::analyze},
+    {flyt::TextName, library::NintendoWare, flyt::probe_text, flyt::analyze_text},
+    {flan::TextName, library::NintendoWare, flan::probe_text, flan::analyze_text},
+    {fcpx::TextName, library::NintendoWare, fcpx::probe_text, fcpx::analyze_text},
+    {fres::intermediate::Name, library::NintendoWare, fres::intermediate::probe, fres::intermediate::analyze},
+    {eset::Name, library::NintendoWare, eset::probe, eset::analyze},
+    {byml::Name, library::Sead, byml::probe, byml::analyze},
 }};
 
 constexpr std::size_t PreviewLength = 16;
@@ -62,6 +75,8 @@ Analysis analyze(Bytes data, const Context& ctx) {
         out.format = std::string(h->name);
       out.errors.push_back(std::string(h->name) + ": " + e.what());
     }
+    if (!out.sections.empty())
+      out.sections.front().prepend("Library", std::string(h->library));
     return out;
   }
 

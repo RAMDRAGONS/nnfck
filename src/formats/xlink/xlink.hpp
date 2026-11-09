@@ -15,22 +15,22 @@ void analyze(Bytes data, Analysis& out, const Context& ctx);
 
 }  // namespace nnfck::xlink
 
-// ELink databases from before XLink: "BLNK", holding effect records per
+// EffectLink databases from before XLink: "BLNK", holding effect records per
 // user, and "eflk", holding call tables, effects and actions per user.
 namespace nnfck::elink {
 
-inline constexpr std::string_view Name = "Binary ELink Database";
+inline constexpr std::string_view Name = "Binary EffectLink Database";
 
 bool probe(Bytes data);
 void analyze(Bytes data, Analysis& out, const Context& ctx);
 
 }  // namespace nnfck::elink
 
-// SLink databases ("SLNK") from before XLink: per user, call tables that
+// SoundLink databases ("SLNK") from before XLink: per user, call tables that
 // play sound assets and actions with their triggers.
 namespace nnfck::slink {
 
-inline constexpr std::string_view Name = "Binary SLink Database";
+inline constexpr std::string_view Name = "Binary SoundLink Database";
 
 bool probe(Bytes data);
 void analyze(Bytes data, Analysis& out, const Context& ctx);

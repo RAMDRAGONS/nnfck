@@ -38,19 +38,37 @@ target_include_directories(nnfck_zstd SYSTEM PUBLIC ${ZSTD_LIB})
 add_library(nnfck_core STATIC
   src/core/file.cpp
   src/core/report.cpp
+  src/core/xml.cpp
   src/formats/registry.cpp
+  src/formats/listing.cpp
   src/formats/yaz/yaz.cpp
   src/formats/zstd/zstd.cpp
   src/formats/sarc/sarc.cpp
-  src/formats/bfres/bfres.cpp
-  src/formats/bfres/common.cpp
-  src/formats/bfres/cafe.cpp
-  src/formats/bfres/nx.cpp
+  src/formats/fres/fres.cpp
+  src/formats/fres/common.cpp
+  src/formats/fres/cafe.cpp
+  src/formats/fres/nx.cpp
+  src/formats/fres/fmaa.cpp
+  src/formats/fres/fmdl.cpp
+  src/formats/fres/fscn.cpp
+  src/formats/fres/fsha.cpp
+  src/formats/fres/fshu.cpp
+  src/formats/fres/fska.cpp
+  src/formats/fres/ftex.cpp
+  src/formats/fres/ftxp.cpp
+  src/formats/fres/fvis.cpp
+  src/formats/fres/intermediate.cpp
   src/formats/bntx/bntx.cpp
   src/formats/gfx/gfx.cpp
   src/formats/gx2/gx2.cpp
   src/formats/byml/byml.cpp
   src/formats/eft/eftb.cpp
+  src/formats/eft/eset.cpp
+  src/formats/layout/common.cpp
+  src/formats/layout/flyt.cpp
+  src/formats/layout/flan.cpp
+  src/formats/layout/fcpx.cpp
+  src/formats/layout/flim.cpp
   src/formats/xlink/xlink.cpp
   src/formats/xlink/elink.cpp
   src/formats/xlink/slink.cpp

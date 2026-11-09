@@ -1,36 +1,13 @@
 #include <iterator>
 #include <optional>
 
-#include "formats/bfres/common.hpp"
+#include "formats/fres/resources.hpp"
 
 // Switch (nn::g3d) resources: blocks referring to each other through absolute
 // 64-bit offsets, stored as arrays alongside dictionaries that name them.
-namespace nnfck::bfres {
+namespace nnfck::fres {
 
 namespace {
-
-// Field offsets within each block type. Before 9.x every block opened with a
-// 16-byte block header and kept its flags near the end; from 9.x a 4-byte
-// signature is followed directly by the flags and the counts were reordered.
-struct NxLayout {
-  std::size_t name;  // every named block keeps its name pointer here
-
-  std::size_t model_stride, model_skeleton, model_vertices, model_shape_dic, model_material_dic;
-  std::size_t model_vertex_count, model_shape_count, model_material_count;
-  std::size_t skeleton_bone_count;
-  std::size_t vertex_stride, vertex_count;
-
-  std::size_t skeletal_stride, skeletal_flag, skeletal_frames, skeletal_curves, skeletal_bone_anims;
-
-  std::size_t material_stride, material_flag, material_frames, material_curves, material_per_material;
-  std::size_t material_shader_param, material_tex_pattern, material_visibility, material_textures;
-
-  std::size_t bone_vis_stride, bone_vis_flag, bone_vis_frames, bone_vis_anims, bone_vis_curves;
-
-  std::size_t shape_stride, shape_flag, shape_frames, shape_vertex_anims, shape_key_anims, shape_curves;
-
-  std::size_t scene_stride, scene_cameras, scene_lights, scene_fogs;
-};
 
 constexpr NxLayout Layout5 = {
     0x10,
@@ -81,15 +58,6 @@ std::optional<NxLayout> layout_for(u16 major) {
   }
 }
 
-std::string nx_string(const ByteReader& r, u64 at) {
-  if (at == 0)
-    return {};
-  const u16 length = r.u16_at(static_cast<std::size_t>(at));
-  r.require(static_cast<std::size_t>(at) + 2, length, "BFRES string");
-  const Bytes s = r.data().subspan(static_cast<std::size_t>(at) + 2, length);
-  return std::string(s.begin(), s.end());
-}
-
 std::vector<ListEntry> nx_dict(const ByteReader& r, Analysis& out, std::size_t field, const Context& ctx) {
   std::vector<ListEntry> entries;
   const u64 dict = r.u64_at(field);
@@ -111,100 +79,6 @@ std::vector<ListEntry> nx_dict(const ByteReader& r, Analysis& out, std::size_t f
   return entries;
 }
 
-std::size_t dict_count(const ByteReader& r, std::size_t field) {
-  const u64 dict = r.u64_at(field);
-  return dict == 0 ? 0 : static_cast<std::size_t>(r.s32_at(static_cast<std::size_t>(dict) + 4));
-}
-
-std::string frames(s32 n) {
-  return count_of(static_cast<u64>(n < 0 ? 0 : n), "frame");
-}
-
-void expect_count(Analysis& out, const std::string& owner, const char* what, u32 declared, std::size_t listed) {
-  if (declared != listed)
-    out.warnings.push_back("BFRES " + owner + " counts " + std::to_string(declared) + " " + what +
-                           " but its dictionary names " + std::to_string(listed));
-}
-
-std::string model(const ByteReader& r, const NxLayout& l, Analysis& out, std::size_t at, const std::string& name,
-                  const Context& ctx) {
-  const u16 vertex_count = r.u16_at(at + l.model_vertex_count);
-  const u16 shape_count = r.u16_at(at + l.model_shape_count);
-  const u16 material_count = r.u16_at(at + l.model_material_count);
-  expect_count(out, "model \"" + name + "\"", "shapes", shape_count, dict_count(r, at + l.model_shape_dic));
-  expect_count(out, "model \"" + name + "\"", "materials", material_count, dict_count(r, at + l.model_material_dic));
-
-  std::vector<std::string> parts;
-  const u64 skeleton = r.u64_at(at + l.model_skeleton);
-  if (skeleton != 0 && r.magic_at(static_cast<std::size_t>(skeleton), "FSKL"))
-    parts.push_back(count_of(r.u16_at(static_cast<std::size_t>(skeleton) + l.skeleton_bone_count), "bone"));
-  else
-    out.warnings.push_back("BFRES model \"" + name + "\" has no FSKL skeleton block");
-  parts.push_back(count_of(shape_count, "shape"));
-  parts.push_back(count_of(material_count, "material"));
-
-  const u64 vertices = r.u64_at(at + l.model_vertices);
-  // Models may share one vertex buffer array, so each walk is charged.
-  ctx.spend(u64{vertex_count} * l.vertex_stride, "vertex buffers");
-  u64 total = 0;
-  for (u16 i = 0; i < vertex_count && vertices != 0; ++i) {
-    const std::size_t v = static_cast<std::size_t>(vertices) + std::size_t(i) * l.vertex_stride;
-    if (!r.magic_at(v, "FVTX")) {
-      out.warnings.push_back("BFRES model \"" + name + "\" vertex buffer " + std::to_string(i) +
-                             " lacks its FVTX signature");
-      break;
-    }
-    total += r.u32_at(v + l.vertex_count);
-  }
-  parts.push_back(count_of(vertex_count, "vertex buffer"));
-  parts.push_back(count_of(total, "vertex", "vertices"));
-  return join(parts);
-}
-
-std::string skeletal_anim(const ByteReader& r, const NxLayout& l, std::size_t at) {
-  std::vector<std::string> parts{frames(r.s32_at(at + l.skeletal_frames)),
-                                 count_of(r.u16_at(at + l.skeletal_bone_anims), "bone animation"),
-                                 count_of(static_cast<u32>(r.s32_at(at + l.skeletal_curves)), "curve")};
-  add_anim_flags(parts, r.u16_at(at + l.skeletal_flag));
-  return join(parts);
-}
-
-std::string material_anim(const ByteReader& r, const NxLayout& l, std::size_t at) {
-  std::vector<std::string> parts{
-      frames(r.s32_at(at + l.material_frames)),
-      count_of(r.u16_at(at + l.material_per_material), "material animation"),
-      count_of(r.u16_at(at + l.material_shader_param), "shader parameter animation"),
-      count_of(r.u16_at(at + l.material_tex_pattern), "texture pattern animation"),
-      count_of(r.u16_at(at + l.material_visibility), "visibility animation"),
-      count_of(r.u16_at(at + l.material_textures), "texture"),
-      count_of(r.u16_at(at + l.material_curves), "curve")};
-  add_anim_flags(parts, r.u16_at(at + l.material_flag));
-  return join(parts);
-}
-
-std::string bone_vis_anim(const ByteReader& r, const NxLayout& l, std::size_t at) {
-  std::vector<std::string> parts{frames(r.s32_at(at + l.bone_vis_frames)),
-                                 count_of(r.u16_at(at + l.bone_vis_anims), "animation"),
-                                 count_of(r.u16_at(at + l.bone_vis_curves), "curve")};
-  add_anim_flags(parts, r.u16_at(at + l.bone_vis_flag));
-  return join(parts);
-}
-
-std::string shape_anim(const ByteReader& r, const NxLayout& l, std::size_t at) {
-  std::vector<std::string> parts{frames(r.s32_at(at + l.shape_frames)),
-                                 count_of(r.u16_at(at + l.shape_vertex_anims), "vertex shape animation"),
-                                 count_of(r.u16_at(at + l.shape_key_anims), "key shape animation"),
-                                 count_of(r.u16_at(at + l.shape_curves), "curve")};
-  add_anim_flags(parts, r.u16_at(at + l.shape_flag));
-  return join(parts);
-}
-
-std::string scene_anim(const ByteReader& r, const NxLayout& l, std::size_t at) {
-  return join({count_of(r.u16_at(at + l.scene_cameras), "camera animation"),
-               count_of(r.u16_at(at + l.scene_lights), "light animation"),
-               count_of(r.u16_at(at + l.scene_fogs), "fog animation")});
-}
-
 enum class Kind { Model, Skeletal, Material, BoneVis, Shape, Scene };
 
 std::size_t stride(const NxLayout& l, Kind kind) {
@@ -222,12 +96,12 @@ std::size_t stride(const NxLayout& l, Kind kind) {
 std::string describe(const ByteReader& r, const NxLayout& l, Analysis& out, Kind kind, std::size_t at,
                      const std::string& name, const Context& ctx) {
   switch (kind) {
-  case Kind::Model: return model(r, l, out, at, name, ctx);
-  case Kind::Skeletal: return skeletal_anim(r, l, at);
-  case Kind::Material: return material_anim(r, l, at);
-  case Kind::BoneVis: return bone_vis_anim(r, l, at);
-  case Kind::Shape: return shape_anim(r, l, at);
-  case Kind::Scene: return scene_anim(r, l, at);
+  case Kind::Model: return fmdl::describe_nx(r, l, out, at, name, ctx);
+  case Kind::Skeletal: return fska::describe_nx(r, l, at);
+  case Kind::Material: return fmaa::describe_nx(r, l, at);
+  case Kind::BoneVis: return fvis::describe_nx(r, l, at);
+  case Kind::Shape: return fsha::describe_nx(r, l, at);
+  case Kind::Scene: return fscn::describe_nx(r, l, at);
   }
   return {};
 }
@@ -296,17 +170,17 @@ void analyze_nx(ByteReader& r, Analysis& out, const Context& ctx) {
   struct NxGroup {
     std::size_t array_field;
     std::size_t dict_field;
-    const char* label;
+    std::string_view label;
     const char* magic;
     Kind kind;
   };
   const NxGroup groups_layout[] = {
-      {0x28, 0x30, "Models (FMDL)", "FMDL", Kind::Model},
-      {o + 0x00, o + 0x08, "Skeletal Animations (FSKA)", "FSKA", Kind::Skeletal},
-      {o + 0x10, o + 0x18, "Material Animations (FMAA)", "FMAA", Kind::Material},
-      {o + 0x20, o + 0x28, "Bone Visibility Animations (FBVS)", "FBVS", Kind::BoneVis},
-      {o + 0x30, o + 0x38, "Shape Animations (FSHA)", "FSHA", Kind::Shape},
-      {o + 0x40, o + 0x48, "Scene Animations (FSCN)", "FSCN", Kind::Scene},
+      {0x28, 0x30, fmdl::Name, "FMDL", Kind::Model},
+      {o + 0x00, o + 0x08, fska::Name, "FSKA", Kind::Skeletal},
+      {o + 0x10, o + 0x18, fmaa::Name, "FMAA", Kind::Material},
+      {o + 0x20, o + 0x28, fvis::BoneName, "FBVS", Kind::BoneVis},
+      {o + 0x30, o + 0x38, fsha::Name, "FSHA", Kind::Shape},
+      {o + 0x40, o + 0x48, fscn::Name, "FSCN", Kind::Scene},
   };
 
   const std::optional<NxLayout> layout = layout_for(major);
@@ -317,7 +191,7 @@ void analyze_nx(ByteReader& r, Analysis& out, const Context& ctx) {
   std::vector<Group> groups;
   for (std::size_t i = 0; i < std::size(groups_layout); ++i) {
     const NxGroup& g = groups_layout[i];
-    Group group{g.label, nx_dict(r, out, g.dict_field, ctx)};
+    Group group{std::string(g.label), nx_dict(r, out, g.dict_field, ctx)};
     const u16 declared = count_at(i);
     if (group.entries.size() != declared)
       out.warnings.push_back("BFRES header counts " + std::to_string(declared) + " " + g.magic +
@@ -370,4 +244,4 @@ void analyze_nx(ByteReader& r, Analysis& out, const Context& ctx) {
   add_external_files(out, external_names, spans, r.data(), ctx);
 }
 
-}  // namespace nnfck::bfres
+}  // namespace nnfck::fres

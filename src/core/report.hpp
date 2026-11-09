@@ -26,6 +26,11 @@ public:
     return *this;
   }
 
+  Section& prepend(std::string key, std::string value) {
+    m_fields.insert(m_fields.begin(), {std::move(key), std::move(value), 0});
+    return *this;
+  }
+
   const std::string& title() const { return m_title; }
   const std::vector<Field>& fields() const { return m_fields; }
 
@@ -59,5 +64,7 @@ std::string fmt_size(u64 value);
 std::string fmt_hex_bytes(Bytes bytes);
 std::string fmt_quoted(Bytes bytes);
 std::string fmt_bool(bool value);
+// Shortest text that reads back as the same float.
+std::string fmt_float(float value);
 
 }  // namespace nnfck

@@ -1,8 +1,8 @@
-#include "formats/bfres/bfres.hpp"
+#include "formats/fres/fres.hpp"
 
-#include "formats/bfres/common.hpp"
+#include "formats/fres/common.hpp"
 
-namespace nnfck::bfres {
+namespace nnfck::fres {
 
 namespace {
 
@@ -26,4 +26,4 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     analyze_cafe(r, out, ctx);
 }
 
-}  // namespace nnfck::bfres
+}  // namespace nnfck::fres

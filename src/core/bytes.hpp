@@ -1,5 +1,6 @@
 #pragma once
 
+#include <bit>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -79,6 +80,7 @@ public:
 
   s16 s16_at(std::size_t offset) const { return static_cast<s16>(u16_at(offset)); }
   s32 s32_at(std::size_t offset) const { return static_cast<s32>(u32_at(offset)); }
+  float f32_at(std::size_t offset) const { return std::bit_cast<float>(u32_at(offset)); }
 
   bool magic_at(std::size_t offset, std::string_view magic) const {
     if (!has(offset, magic.size()))

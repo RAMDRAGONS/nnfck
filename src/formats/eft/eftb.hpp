@@ -8,7 +8,7 @@
 // VFXB (nn::util::BinaryFileHeader).
 namespace nnfck::eft {
 
-inline constexpr std::string_view Name = "NintendoWare Effect Binary";
+inline constexpr std::string_view Name = "Effect Binary";
 inline constexpr std::string_view Abbreviation = "PTCL";
 
 bool probe(Bytes data);

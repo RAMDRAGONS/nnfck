@@ -44,8 +44,20 @@ struct Context {
   }
 };
 
+// The library that defines a format, printed as each format's first field.
+namespace library {
+inline constexpr std::string_view Sead = "Sead";
+inline constexpr std::string_view NintendoWare = "NintendoWare";
+inline constexpr std::string_view NintendoSDK = "NintendoSDK";
+inline constexpr std::string_view XLink2 = "XLink2";
+inline constexpr std::string_view EffectLink = "EffectLink";
+inline constexpr std::string_view SoundLink = "SoundLink";
+inline constexpr std::string_view Zstandard = "Zstandard";
+}  // namespace library
+
 struct FormatHandler {
   std::string_view name;
+  std::string_view library;
   bool (*probe)(Bytes data);
   void (*analyze)(Bytes data, Analysis& out, const Context& ctx);
 };

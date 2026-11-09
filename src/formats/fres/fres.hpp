@@ -4,11 +4,11 @@
 
 #include "formats/format.hpp"
 
-namespace nnfck::bfres {
+namespace nnfck::fres {
 
-inline constexpr std::string_view Name = "NintendoWare Binary Cafe Resource";
+inline constexpr std::string_view Name = "Binary Cafe Resource";
 
 bool probe(Bytes data);
 void analyze(Bytes data, Analysis& out, const Context& ctx);
 
-}  // namespace nnfck::bfres
+}  // namespace nnfck::fres

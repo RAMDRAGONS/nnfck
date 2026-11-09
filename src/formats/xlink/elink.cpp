@@ -1,9 +1,12 @@
 #include "core/crc32.hpp"
+#include "formats/listing.hpp"
 #include "formats/xlink/xlink.hpp"
 
 namespace nnfck::elink {
 
 namespace {
+
+using listing::count_of;
 
 constexpr std::size_t HeaderSize = 0x20;
 constexpr u32 KnownVersion = 32;
@@ -20,16 +23,12 @@ constexpr std::size_t EflkCallTableSize = 0x14;
 constexpr std::size_t EflkActionTriggerSize = 0x3C;
 constexpr std::size_t EflkActionSize = 0xC;
 
-std::string count_of(u64 n, std::string_view what) {
-  return std::to_string(n) + " " + std::string(what) + (n == 1 ? "" : "s");
-}
-
 // Header: file size, version, user count, record area, record count and
 // string table. Each user is keyed by the CRC-32 of its name and owns a run
 // of fixed-size records.
 void analyze_blnk(Bytes data, Analysis& out, const Context& ctx) {
   ByteReader r(data, Endian::Big);
-  r.require(0, HeaderSize, "ELink header");
+  r.require(0, HeaderSize, "EffectLink header");
   if (r.u32_at(0x8) > 0xFFFF)
     r.set_endian(Endian::Little);
   const u32 file_size = r.u32_at(0x4);
@@ -50,20 +49,20 @@ void analyze_blnk(Bytes data, Analysis& out, const Context& ctx) {
   s.add("String Table", fmt_hex(strings_at));
 
   if (file_size != data.size())
-    out.warnings.push_back("ELink database declares " + fmt_hex(file_size) + " bytes but holds " +
+    out.warnings.push_back("EffectLink database declares " + fmt_hex(file_size) + " bytes but holds " +
                            fmt_hex(data.size()));
   if (version != KnownVersion) {
-    out.warnings.push_back("ELink version " + std::to_string(version) +
+    out.warnings.push_back("EffectLink version " + std::to_string(version) +
                            " has an unknown layout; only its header is shown");
     return;
   }
   if (u64{records_at} != HeaderSize + u64{user_count} * UserSize)
-    out.errors.push_back("ELink record area at " + fmt_hex(records_at) + " does not follow the " +
+    out.errors.push_back("EffectLink record area at " + fmt_hex(records_at) + " does not follow the " +
                          std::to_string(user_count) + " users");
   if (u64{strings_at} != u64{records_at} + u64{record_count} * RecordSize)
-    out.errors.push_back("ELink string table at " + fmt_hex(strings_at) + " does not follow the " +
+    out.errors.push_back("EffectLink string table at " + fmt_hex(strings_at) + " does not follow the " +
                          std::to_string(record_count) + " records");
-  r.require(HeaderSize, std::size_t{user_count} * UserSize, "ELink users");
+  r.require(HeaderSize, std::size_t{user_count} * UserSize, "EffectLink users");
 
   std::vector<std::string> rows;
   for (u32 i = 0; i < user_count; ++i) {
@@ -74,10 +73,10 @@ void analyze_blnk(Bytes data, Analysis& out, const Context& ctx) {
     const std::string name = r.cstring_at(e + r.u32_at(e + 0xC), MaxNameLength);
     ctx.spend(UserSize + name.size(), "user names");
     if (crc32(name) != hash)
-      out.warnings.push_back("ELink user \"" + name + "\" is stored under hash " + fmt_hex(hash, 8) +
+      out.warnings.push_back("EffectLink user \"" + name + "\" is stored under hash " + fmt_hex(hash, 8) +
                              " instead of " + fmt_hex(crc32(name), 8));
     if (u64{first} + count > record_count)
-      out.errors.push_back("ELink user \"" + name + "\" claims records " + std::to_string(first) + " to " +
+      out.errors.push_back("EffectLink user \"" + name + "\" claims records " + std::to_string(first) + " to " +
                            std::to_string(u64{first} + count) + " of " + std::to_string(record_count));
     if (ctx.list_members)
       rows.push_back(name + ": " + count_of(count, "record"));
@@ -96,7 +95,7 @@ void analyze_blnk(Bytes data, Analysis& out, const Context& ctx) {
 // its own strings.
 void analyze_eflk(Bytes data, Analysis& out, const Context& ctx) {
   ByteReader r(data, Endian::Big);
-  r.require(0, EflkHeaderSize, "ELink header");
+  r.require(0, EflkHeaderSize, "EffectLink header");
   if (r.u32_at(0x4) > 0xFFFF)
     r.set_endian(Endian::Little);
   const u32 version = r.u32_at(0x4);
@@ -110,11 +109,11 @@ void analyze_eflk(Bytes data, Analysis& out, const Context& ctx) {
   s.add("Users", std::to_string(user_count));
   s.add("String Table", fmt_hex(strings));
   if (version != EflkVersion) {
-    out.warnings.push_back("ELink version " + std::to_string(version) +
+    out.warnings.push_back("EffectLink version " + std::to_string(version) +
                            " has an unknown layout; only its header is shown");
     return;
   }
-  r.require(EflkHeaderSize, std::size_t{user_count} * EflkUserEntrySize, "ELink users");
+  r.require(EflkHeaderSize, std::size_t{user_count} * EflkUserEntrySize, "EffectLink users");
 
   // Call tables, effects, actions, action triggers.
   u64 totals[4] = {};
@@ -124,7 +123,7 @@ void analyze_eflk(Bytes data, Analysis& out, const Context& ctx) {
     const std::size_t at = r.u32_at(e);
     const std::string name = r.cstring_at(std::size_t{strings} + r.u32_at(e + 4), MaxNameLength);
     ctx.spend(EflkUserEntrySize + name.size(), "user names");
-    r.require(at, EflkUserHeaderSize, "ELink user");
+    r.require(at, EflkUserHeaderSize, "EffectLink user");
     const u32 user_version = r.u32_at(at);
     const u32 effects = r.u32_at(at + 0x4);
     const u32 triggers = r.u32_at(at + 0x8);
@@ -136,12 +135,12 @@ void analyze_eflk(Bytes data, Analysis& out, const Context& ctx) {
                        u64{call_tables} * EflkCallTableSize + u64{triggers} * EflkActionTriggerSize +
                        u64{actions} * EflkActionSize;
     if (user_version != EflkVersion)
-      out.errors.push_back("ELink user \"" + name + "\" carries version " + std::to_string(user_version));
+      out.errors.push_back("EffectLink user \"" + name + "\" carries version " + std::to_string(user_version));
     else if (pool != tables)
-      out.errors.push_back("ELink user \"" + name + "\" places its strings at " + fmt_hex(pool) +
+      out.errors.push_back("EffectLink user \"" + name + "\" places its strings at " + fmt_hex(pool) +
                            " but its tables end at " + fmt_hex(tables));
     else if (!r.has(at, pool))
-      out.errors.push_back("ELink user \"" + name + "\" runs past the end of the file");
+      out.errors.push_back("EffectLink user \"" + name + "\" runs past the end of the file");
     totals[0] += call_tables;
     totals[1] += effects;
     totals[2] += actions;

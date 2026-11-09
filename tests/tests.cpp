@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <bit>
 #include <cstdio>
 #include <filesystem>
 #include <functional>
@@ -126,20 +127,20 @@ void test_expansion_limit() {
 
   const auto file = yaz_file(0x10000000, {0x00});
   const Analysis a = analyze(file, Context{});
-  check(!a.errors.empty() && a.format == "Sead Yaz (corrupt)", "impossible size is reported without decoding");
+  check(!a.errors.empty() && a.format == "Yaz (corrupt)", "impossible size is reported without decoding");
 }
 
 void test_analysis_format_names() {
   const Analysis empty = analyze(yaz_file(0, {}), Context{});
-  check(empty.format == "Sead Yaz-compressed empty data", "empty payload naming");
+  check(empty.format == "Yaz-compressed empty data", "empty payload naming");
 
   const Analysis unknown = analyze(yaz_file(3, {0xE0, 'a', 'b', 'c'}), Context{});
-  check(unknown.format == "Sead Yaz-compressed unknown data", "unknown payload naming");
+  check(unknown.format == "Yaz-compressed unknown data", "unknown payload naming");
 
   // A Yaz stream wrapping a minimal big-endian BYML header with no root node.
   const Analysis byml = analyze(yaz_file(16, {0xFF, 'B', 'Y', 0, 2, 0, 0, 0, 0, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0}),
                                 Context{});
-  check(byml.format == "Sead Yaz-compressed Sead Binary YAML", "nested payload naming");
+  check(byml.format == "Yaz-compressed Binary YAML", "nested payload naming");
   check(byml.errors.empty(), "nested payload has no errors");
 }
 
@@ -286,6 +287,301 @@ void put_u32_le(std::vector<u8>& v, std::size_t at, u32 x) {
     v[at + static_cast<std::size_t>(i)] = static_cast<u8>(x >> (8 * i));
 }
 
+bool has_row(const Analysis& a, std::string_view text) {
+  for (const Section& s : a.sections)
+    for (const Field& f : s.fields())
+      if (f.key.empty() && f.value == text)
+        return true;
+  return false;
+}
+
+void put_f32_le(std::vector<u8>& v, std::size_t at, float x) {
+  put_u32_le(v, at, std::bit_cast<u32>(x));
+}
+
+void put_text(std::vector<u8>& v, std::size_t at, std::string_view text) {
+  std::copy(text.begin(), text.end(), v.begin() + static_cast<std::ptrdiff_t>(at));
+}
+
+// A little-endian layout block: kind, size, then `body` padded to four bytes.
+std::vector<u8> layout_block(std::string_view kind, std::vector<u8> body) {
+  body.resize((body.size() + 3) & ~std::size_t{3});
+  std::vector<u8> v(8);
+  put_text(v, 0, kind);
+  put_u32_le(v, 4, static_cast<u32>(8 + body.size()));
+  v.insert(v.end(), body.begin(), body.end());
+  return v;
+}
+
+std::vector<u8> layout_file(std::string_view magic, u32 version, const std::vector<std::vector<u8>>& blocks) {
+  std::vector<u8> v(0x14);
+  put_text(v, 0, magic);
+  v[4] = 0xFF;
+  v[5] = 0xFE;
+  put_u16(v, 6, 0x14);
+  put_u32_le(v, 8, version);
+  for (const auto& b : blocks)
+    v.insert(v.end(), b.begin(), b.end());
+  put_u32_le(v, 0xC, static_cast<u32>(v.size()));
+  v[0x10] = static_cast<u8>(blocks.size());
+  return v;
+}
+
+std::vector<u8> pane_body(std::string_view name) {
+  std::vector<u8> body(0x4C);
+  put_text(body, 4, name);
+  return body;
+}
+
+// Groups widened their name from 24 bytes to 33 plus padding.
+std::vector<u8> group_body(std::string_view name, std::string_view pane, bool legacy) {
+  const std::size_t header = legacy ? 0x1C : 0x24;
+  std::vector<u8> body(header + 24);
+  put_text(body, 0, name);
+  put_u16(body, legacy ? 24 : 34, 1);
+  put_text(body, header, pane);
+  return body;
+}
+
+std::vector<u8> flyt_file(u32 version, bool legacy_groups, bool close_tree) {
+  std::vector<u8> layout(0x14 + 8);
+  layout[0] = 1;
+  put_f32_le(layout, 4, 1280);
+  put_f32_le(layout, 8, 720);
+  put_text(layout, 0x14, "Test");
+  std::vector<std::vector<u8>> blocks{layout_block("lyt1", layout), layout_block("pan1", pane_body("RootPane")),
+                                      layout_block("pas1", {}), layout_block("pic1", pane_body("P_Child"))};
+  if (close_tree)
+    blocks.push_back(layout_block("pae1", {}));
+  blocks.push_back(layout_block("grp1", group_body("RootGroup", "P_Child", legacy_groups)));
+  return layout_file("FLYT", version, blocks);
+}
+
+std::vector<u8> flan_file() {
+  std::vector<u8> tag(0x18 + 4 + 36);
+  put_u16(tag, 2, 1);
+  put_u32_le(tag, 4, 0x20);
+  put_u32_le(tag, 8, 0x24);
+  put_u16(tag, 0x12, 10);
+  put_text(tag, 0x18, "In");
+  put_text(tag, 0x1C, "G_All");
+  std::vector<u8> anim(0x3C - 8 + 8);
+  put_u16(anim, 0, 10);
+  put_u16(anim, 6, 1);
+  put_u32_le(anim, 8, 0x14);
+  put_u32_le(anim, 0xC, 0x18);
+  put_text(anim, 0x10, "N_Root");
+  anim[0x10 + 28] = 1;
+  put_u32_le(anim, 0x10 + 32, 0x24);
+  put_text(anim, 0x34, "FLPA");
+  return layout_file("FLAN", 0x08000000, {layout_block("pat1", tag), layout_block("pai1", anim)});
+}
+
+// A pair font joining a bitmap font and one scalable face limited to ASCII.
+std::vector<u8> fcpx_file() {
+  std::vector<u8> v(0x94);
+  put_text(v, 0, "FCPX");
+  v[4] = 0xFF;
+  v[5] = 0xFE;
+  put_u16(v, 6, 0x14);
+  put_u32_le(v, 8, 0x09000000);
+  put_u32_le(v, 0xC, 0x94);
+  v[0x10] = 1;
+  put_u32_le(v, 0x14, 4);
+  put_u32_le(v, 0x18, 2);
+  put_u32_le(v, 0x1C, 0xC);
+  put_u32_le(v, 0x20, 0x1C);
+  put_u32_le(v, 0x28, 0x7C - 0x24);
+  put_u32_le(v, 0x34, 1);
+  put_f32_le(v, 0x38, 20);
+  put_u32_le(v, 0x40, 1);
+  put_u32_le(v, 0x44, 0x20);
+  put_u32_le(v, 0x54 + 0xC, 0x84 - 0x34);
+  put_u32_le(v, 0x54 + 0x20, 1);
+  put_u32_le(v, 0x54 + 0x24, 0x8C - 0x34);
+  put_text(v, 0x7C, "a.bffnt");
+  put_text(v, 0x84, "b.bfttf");
+  put_u32_le(v, 0x8C, 0x20);
+  put_u32_le(v, 0x90, 0x7E);
+  return v;
+}
+
+// A big-endian layout image: 0x200 bytes of surface, then the footer.
+std::vector<u8> flim_file() {
+  std::vector<u8> v(0x200 + 0x28);
+  const auto be32 = [&](std::size_t at, u32 x) {
+    for (int i = 0; i < 4; ++i)
+      v[at + static_cast<std::size_t>(i)] = static_cast<u8>(x >> (24 - 8 * i));
+  };
+  const std::size_t h = 0x200;
+  put_text(v, h, "FLIM");
+  v[h + 4] = 0xFE;
+  v[h + 5] = 0xFF;
+  v[h + 7] = 0x14;
+  be32(h + 8, 0x02020000);
+  be32(h + 0xC, static_cast<u32>(v.size()));
+  v[h + 0x11] = 1;
+  put_text(v, h + 0x14, "imag");
+  be32(h + 0x18, 0x10);
+  v[h + 0x1D] = 64;
+  v[h + 0x1F] = 32;
+  v[h + 0x21] = 0x20;
+  v[h + 0x22] = 12;
+  v[h + 0x23] = 4 | (3 << 5);
+  be32(h + 0x24, 0x200);
+  return v;
+}
+
+std::vector<u8> text_file(std::string_view text) {
+  return std::vector<u8>(text.begin(), text.end());
+}
+
+void test_layout_sources() {
+  const Analysis image = analyze(flim_file(), Context{});
+  check(image.sections.front().fields().front().key == "Library" && field(image, "Library") == "NintendoWare",
+        "the library is the first field");
+  check(image.format == "Cafe Layout Image (Wii U)" && image.errors.empty() && image.warnings.empty() &&
+            field(image, "Width") == "64" && field(image, "Height") == "32" && field(image, "Format") == "BC1" &&
+            field(image, "Swizzle") == "3",
+        "layout image footer is read");
+
+  const Analysis lyt = analyze(text_file(R"(<?xml version="1.0" encoding="utf-8"?>
+<nw4f_layout version="1.5.12" xmlns="http://www.nintendo.co.jp/NW4F/LayoutEditor">
+  <head><generator name="Editor" version="2.0" /></head>
+  <body>
+    <lyt>
+      <paneSet>
+        <pane kind="Picture" name="P_A"><picture><material name="P_A" /></picture></pane>
+        <pane kind="Parts" name="L_B"><parts path="Btn&amp;00.flyt" /></pane>
+      </paneSet>
+      <paneHierarchy><paneTree name="RootPane"><paneTree name="P_A" /><paneTree name="L_B" /></paneTree></paneHierarchy>
+      <groupSet><group name="RootGroup"><paneRef name="P_A" /></group></groupSet>
+      <screenSetting origin="Classic"><layoutSize x="1280" y="720" /></screenSetting>
+      <control name="Button" userName="Main" />
+      <textureFile imagePath="a.tga" format="BC1" />
+    </lyt>
+  </body>
+</nw4f_layout>)"),
+                               Context{});
+  check(lyt.format == "Cafe Layout" && lyt.errors.empty() && lyt.warnings.empty() &&
+            field(lyt, "Origin") == "Top left" && field(lyt, "Control") == "Button (Main)" &&
+            field(lyt, "Panes") == "2 (1 Picture, 1 Parts)" && has_row(lyt, "L_B: Parts (Btn&00.flyt)") &&
+            has_row(lyt, "RootPane: Null") && has_row(lyt, "RootGroup: 1 pane"),
+        "layout source panes, parts and groups are listed");
+
+  const Analysis anim = analyze(text_file(R"(<nw4f_layout version="1.0"><body separateMode="true">
+  <animTag name="In" startFrame="0" endFrame="10" animLoop="OneTime"><group name="G_A" />
+    <lan animType="PaneSRT" startFrame="0" endFrame="10"><animContent name="P_A" /></lan>
+  </animTag>
+  <lan animType="Visibility" startFrame="0" endFrame="10"><animContent name="P_A" /></lan>
+</body></nw4f_layout>)"),
+                                Context{});
+  check(anim.format == "Cafe Layout Animation" && anim.errors.empty() && field(anim, "Separate Mode") == "Yes" &&
+            has_row(anim, "In: frames 0 to 10, OneTime, 1 group (G_A)") && has_row(anim, "P_A: PaneSRT, Visibility"),
+        "layout animation source tags and targets are listed");
+
+  const Analysis font = analyze(text_file(R"(<complexFontDescription version="1.0"><subFont><pairFont>
+  <firstFont><bitmapFont><path>a.ffnt</path></bitmapFont></firstFont>
+  <secondFont><multiScalableFont size="20"><scalableFontDescriptionSet>
+    <scalableFontDescription><path>b.ttf</path>
+      <charCodeRangeSet><charCodeRange first="32" last="126" /></charCodeRangeSet>
+    </scalableFontDescription>
+  </scalableFontDescriptionSet></multiScalableFont></secondFont>
+</pairFont></subFont></complexFontDescription>)"),
+                                Context{});
+  check(font.format == "Cafe Complex Font" && font.errors.empty() && font.warnings.empty() &&
+            field(font, "Font Files") == "2" && has_row(font, "Bitmap font a.ffnt: all characters") &&
+            has_row(font, "b.ttf: 0x0020 to 0x007E"),
+        "complex font source tree is walked");
+
+  check(!analyze(text_file("<nw4f_layout><body><lyt></body></nw4f_layout>"), Context{}).errors.empty(),
+        "mismatched XML tags are reported");
+}
+
+// An intermediate model, with the binary variant's stream table appended
+// after a NUL when `binary` is set.
+std::vector<u8> intermediate_file(bool binary) {
+  std::string xml = R"(<?xml version="1.0" encoding="utf-8"?>
+<nw4f_3dif version="4.0.0">
+<file_info><create tool_name="Exporter" tool_version="1.0" date_time="2020-01-01T00:00:00" /></file_info>
+<model>
+<model_info material_count="1" bone_count="1" />
+<material_array length="1"><material index="0" name="mat0" /></material_array>
+<skeleton><bone_array length="1"><bone index="0" name="root" /></bone_array></skeleton>
+</model>
+</nw4f_3dif>)";
+  std::vector<u8> v(xml.begin(), xml.end());
+  if (!binary)
+    return v;
+  v.resize((v.size() + 4 + 31) & ~std::size_t{31});
+  const std::size_t table = v.size();
+  v.resize(table + 0x20 + 0x18 + 8);
+  put_text(v, table, "g3dstrma");
+  put_u32_le(v, table + 8, 1);
+  put_u32_le(v, table + 0xC, 0x20);
+  put_u32_le(v, table + 0x10, 0x18 + 8);
+  put_text(v, table + 0x20, "stream  ");
+  put_u32_le(v, table + 0x28, 0);
+  put_u32_le(v, table + 0x2C, 2);
+  put_u32_le(v, table + 0x30, 1);
+  put_u32_le(v, table + 0x34, 8);
+  return v;
+}
+
+void test_intermediates() {
+  const Analysis text = analyze(intermediate_file(false), Context{});
+  check(text.format == "Cafe Model" && text.errors.empty() && text.warnings.empty() &&
+            field(text, "Material Count") == "1" && field(text, "Created With") == "Exporter 1.0" &&
+            has_row(text, "mat0") && has_row(text, "root"),
+        "intermediate model is summarized");
+  const Analysis binary = analyze(intermediate_file(true), Context{});
+  check(binary.format == "Cafe Model Binary" && binary.errors.empty() && field(binary, "Streams") == "1" &&
+            has_row(binary, "float, 2 values, 0x8 bytes"),
+        "binary intermediate streams are read");
+
+  const Analysis cafe = analyze(text_file(R"(<?xml version="1.0"?>
+<EmitterSet><Version>1.8.0.0</Version><EmitterList>
+  <Emitter><name>Smoke</name><type>Complex</type><texture>smoke.ftxb</texture></Emitter>
+</EmitterList></EmitterSet>)"),
+                                Context{});
+  check(cafe.format == "Emitter Set" && cafe.errors.empty() && field(cafe, "Version") == "1.8.0.0" &&
+            has_row(cafe, "Smoke: Complex") && has_row(cafe, "smoke.ftxb"),
+        "Wii U emitter set source is listed");
+  const Analysis nx = analyze(text_file(R"(<EmitterSetData Version="1.0.0.7"><EmitterList>
+  <EmitterData><Name>Parent</Name><Textures><Texture0><EmitterTextureFileData><FilePath>a.ftxb</FilePath>
+  </EmitterTextureFileData></Texture0></Textures>
+    <EmitterList><EmitterData><Name>Child</Name></EmitterData></EmitterList>
+  </EmitterData>
+</EmitterList></EmitterSetData>)"),
+                              Context{});
+  check(nx.format == "Emitter Set" && nx.errors.empty() && field(nx, "Emitters") == "2" &&
+            has_row(nx, "Child") && has_row(nx, "a.ftxb"),
+        "Switch emitter set source nests child emitters");
+}
+
+void test_layouts() {
+  const Analysis lyt = analyze(flyt_file(0x08000000, false, true), Context{});
+  check(lyt.format == "Binary Cafe Layout (Switch)" && lyt.errors.empty() && lyt.warnings.empty() &&
+            field(lyt, "Panes") == "2 (1 Null, 1 Picture)" && field(lyt, "Name") == "Test" &&
+            has_row(lyt, "P_Child: Picture") && has_row(lyt, "RootGroup: 1 pane"),
+        "layout panes and groups are listed");
+  const Analysis legacy = analyze(flyt_file(0x02020000, true, true), Context{});
+  check(legacy.errors.empty() && has_row(legacy, "RootGroup: 1 pane"), "layout groups with 24-byte names are read");
+  check(!analyze(flyt_file(0x08000000, false, false), Context{}).errors.empty(), "unclosed pane tree is reported");
+
+  const Analysis anim = analyze(flan_file(), Context{});
+  check(anim.format == "Binary Cafe Layout Animation (Switch)" && anim.errors.empty() && anim.warnings.empty() &&
+            field(anim, "Tag") == "In" && field(anim, "Tag Frames") == "0 to 10" && has_row(anim, "G_All") &&
+            has_row(anim, "N_Root (pane): Pane SRT"),
+        "layout animation tag and targets are listed");
+
+  const Analysis font = analyze(fcpx_file(), Context{});
+  check(font.format == "Binary Cafe Complex Font (Switch)" && font.errors.empty() && font.warnings.empty() &&
+            field(font, "Font Files") == "2" && has_row(font, "Bitmap font a.bffnt: all characters") &&
+            has_row(font, "b.bfttf: 0x0020 to 0x007E"),
+        "complex font tree is walked");
+}
+
 // An XLink database with no users and one asset parameter named `param`.
 std::vector<u8> xlink_file(std::string_view param) {
   std::vector<u8> v(0x48 + 0x14 + 0xC);
@@ -339,7 +635,7 @@ std::vector<u8> xlink21_file() {
   return v;
 }
 
-// An ELink database with one user owning one zeroed record.
+// An EffectLink database with one user owning one zeroed record.
 std::vector<u8> elink_file(std::string_view user, u32 hash) {
   const u32 records = 0x20 + 0x14, strings = records + 0xCC;
   std::vector<u8> v(strings);
@@ -358,7 +654,7 @@ std::vector<u8> elink_file(std::string_view user, u32 hash) {
   return v;
 }
 
-// An SLink database with one user holding one event and its asset.
+// A SoundLink database with one user holding one event and its asset.
 std::vector<u8> slink_file(u32 block_size) {
   const u32 user = 0x14, tables = 0x3C + 0xC + 0x44;
   std::vector<u8> v(user + tables + 4);
@@ -378,7 +674,7 @@ std::vector<u8> slink_file(u32 block_size) {
   return v;
 }
 
-// An eflk ELink database with one user holding one call table and effect.
+// An eflk EffectLink database with one user holding one call table and effect.
 std::vector<u8> eflk_file(u32 pool) {
   const u32 user = 0x18, tables = 0x1C + 0x68 + 0x14;
   std::vector<u8> v(user + tables);
@@ -399,14 +695,16 @@ std::vector<u8> eflk_file(u32 pool) {
 
 void test_link_databases() {
   const Analysis eflk = analyze(eflk_file(0x1C + 0x68 + 0x14), Context{});
-  check(eflk.format == "Binary ELink Database" && eflk.errors.empty() && eflk.warnings.empty(),
-        "well-formed eflk ELink database is clean");
+  check(eflk.format == "Binary EffectLink Database" && eflk.errors.empty() && eflk.warnings.empty(),
+        "well-formed eflk EffectLink database is clean");
   check(!analyze(eflk_file(0x10), Context{}).errors.empty(), "eflk user table mismatch is reported");
 
   const Analysis slink = analyze(slink_file(0x3C + 0xC + 0x44 + 4), Context{});
-  check(slink.format == "Binary SLink Database" && slink.errors.empty() && slink.warnings.empty(),
-        "well-formed SLink database is clean");
-  check(!analyze(slink_file(0x10), Context{}).errors.empty(), "SLink user size mismatch is reported");
+  check(slink.format == "Binary SoundLink Database" && slink.errors.empty() && slink.warnings.empty(),
+        "well-formed SoundLink database is clean");
+  check(!analyze(slink_file(0x10), Context{}).errors.empty(), "SoundLink user size mismatch is reported");
+  check(field(eflk, "Library") == "EffectLink" && field(slink, "Library") == "SoundLink",
+        "link databases name their libraries");
 
   const Analysis effects = analyze(xlink_file("Eset"), Context{});
   check(effects.format == "Binary XLink Database (ELink2)" && effects.errors.empty() && effects.warnings.empty(),
@@ -427,15 +725,15 @@ void test_link_databases() {
         "XLink version 21 lists its named users");
 
   const Analysis elink = analyze(elink_file("Player", crc32("Player")), Context{});
-  check(elink.format == "Binary ELink Database" && elink.errors.empty() && elink.warnings.empty(),
-        "well-formed ELink database is clean");
-  check(analyze(elink_file("Player", 0), Context{}).warnings.size() == 1, "ELink user hash mismatch is reported");
+  check(elink.format == "Binary EffectLink Database" && elink.errors.empty() && elink.warnings.empty(),
+        "well-formed EffectLink database is clean");
+  check(analyze(elink_file("Player", 0), Context{}).warnings.size() == 1, "EffectLink user hash mismatch is reported");
 }
 
 void test_zstd() {
   const std::vector<u8> byml{'B', 'Y', 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   const Analysis a = analyze(zstd_frame(byml), Context{});
-  check(a.format == "Zstandard-compressed Sead Binary YAML" && a.errors.empty(), "zstd payload naming");
+  check(a.format == "Zstandard-compressed Binary YAML" && a.errors.empty(), "zstd payload naming");
 
   const Analysis unsized = analyze(zstd_frame({'a', 'b', 'c'}, false), Context{});
   check(unsized.format == "Zstandard-compressed unknown data" && unsized.errors.empty(),
@@ -503,6 +801,9 @@ int main(int argc, char** argv) {
   test_ptcl_overlapping_siblings();
   test_zstd();
   test_link_databases();
+  test_layouts();
+  test_layout_sources();
+  test_intermediates();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";

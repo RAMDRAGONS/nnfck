@@ -1,6 +1,6 @@
-#include "formats/bfres/common.hpp"
+#include "formats/fres/common.hpp"
 
-namespace nnfck::bfres {
+namespace nnfck::fres {
 
 namespace {
 
@@ -20,8 +20,12 @@ void add_groups(Analysis& out, const std::vector<Group>& groups) {
     if (g.entries.empty())
       continue;
     s.add(g.label, std::to_string(g.entries.size()));
-    for (const ListEntry& e : g.entries)
-      s.add("", e.detail.empty() ? e.name : e.name + ": " + e.detail, 1);
+    for (const ListEntry& e : g.entries) {
+      std::string row = e.data != 0 ? fmt_hex(e.data, 8) + "  " + e.name : e.name;
+      if (!e.detail.empty())
+        row += ": " + e.detail;
+      s.add("", std::move(row), 1);
+    }
   }
 }
 
@@ -62,21 +66,6 @@ std::size_t max_dict_entries(const ByteReader& r, std::size_t dict) {
   return dict < r.size() ? (r.size() - dict) / DictNodeSize : 0;
 }
 
-std::string count_of(u64 n, std::string_view singular, std::string_view plural) {
-  std::string word(n == 1 ? singular : (plural.empty() ? std::string(singular) + "s" : std::string(plural)));
-  return std::to_string(n) + " " + word;
-}
-
-std::string join(const std::vector<std::string>& parts) {
-  std::string out;
-  for (const std::string& p : parts) {
-    if (!out.empty())
-      out += ", ";
-    out += p;
-  }
-  return out;
-}
-
 void add_anim_flags(std::vector<std::string>& parts, u32 flag) {
   if (flag & AnimPlayPolicyLoop)
     parts.push_back("looping");
@@ -84,4 +73,44 @@ void add_anim_flags(std::vector<std::string>& parts, u32 flag) {
     parts.push_back("baked");
 }
 
-}  // namespace nnfck::bfres
+std::string frames(s32 n) {
+  return count_of(static_cast<u64>(n < 0 ? 0 : n), "frame");
+}
+
+void expect_count(Analysis& out, const std::string& owner, std::string_view what, u32 declared, std::size_t listed,
+                  std::string_view source) {
+  if (declared != listed)
+    out.warnings.push_back("BFRES " + owner + " counts " + std::to_string(declared) + " " + std::string(what) +
+                           " but its " + std::string(source) + " lists " + std::to_string(listed));
+}
+
+u64 cafe_offset(const ByteReader& r, std::size_t field) {
+  const s32 v = r.s32_at(field);
+  return v == 0 ? 0 : static_cast<u64>(static_cast<std::int64_t>(field) + v);
+}
+
+std::string cafe_string(const ByteReader& r, std::size_t field) {
+  const u64 at = cafe_offset(r, field);
+  return at != 0 ? r.cstring_at(static_cast<std::size_t>(at), MaxNameLength) : std::string();
+}
+
+std::size_t cafe_dict_count(const ByteReader& r, std::size_t field) {
+  const u64 dict = cafe_offset(r, field);
+  return dict == 0 ? 0 : static_cast<std::size_t>(r.s32_at(static_cast<std::size_t>(dict) + 4));
+}
+
+std::string nx_string(const ByteReader& r, u64 at) {
+  if (at == 0)
+    return {};
+  const u16 length = r.u16_at(static_cast<std::size_t>(at));
+  r.require(static_cast<std::size_t>(at) + 2, length, "BFRES string");
+  const Bytes s = r.data().subspan(static_cast<std::size_t>(at) + 2, length);
+  return std::string(s.begin(), s.end());
+}
+
+std::size_t nx_dict_count(const ByteReader& r, std::size_t field) {
+  const u64 dict = r.u64_at(field);
+  return dict == 0 ? 0 : static_cast<std::size_t>(r.s32_at(static_cast<std::size_t>(dict) + 4));
+}
+
+}  // namespace nnfck::fres

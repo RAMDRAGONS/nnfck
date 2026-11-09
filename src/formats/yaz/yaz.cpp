@@ -57,7 +57,7 @@ bool probe(Bytes data) {
 
 Header read_header(Bytes data) {
   const ByteReader r(data, Endian::Big);
-  r.require(0, HeaderSize, "Sead Yaz header");
+  r.require(0, HeaderSize, "Yaz header");
   Header h{};
   std::copy_n(data.begin(), 4, h.magic.begin());
   h.decompressed_size = r.u32_at(0x4);
@@ -160,14 +160,14 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   add_header_fields(s, h, data.size());
 
   if (h.data_alignment != 0 && !is_power_of_two(h.data_alignment))
-    out.warnings.push_back("Sead Yaz data alignment " + fmt_hex(h.data_alignment) + " is not a power of two");
+    out.warnings.push_back("Yaz data alignment " + fmt_hex(h.data_alignment) + " is not a power of two");
   if (std::any_of(h.reserved.begin(), h.reserved.end(), [](u8 b) { return b != 0; }))
-    out.warnings.push_back("Sead Yaz reserved bytes are not zero");
+    out.warnings.push_back("Yaz reserved bytes are not zero");
 
   const u64 limit = max_decompressed_size(data.size());
   if (h.decompressed_size > limit) {
     out.format = std::string(Name) + " (corrupt)";
-    out.errors.push_back("Sead Yaz decompressed size " + fmt_hex(h.decompressed_size) + " is impossible for " +
+    out.errors.push_back("Yaz decompressed size " + fmt_hex(h.decompressed_size) + " is impossible for " +
                          fmt_hex(data.size()) + " bytes of input (at most " + fmt_hex(limit) + ")");
     return;
   }
@@ -186,7 +186,7 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   } catch (const ParseError& e) {
     add_stream_fields(s, st, data.size());
     out.format = std::string(Name) + " (corrupt stream)";
-    out.errors.push_back(std::string("Sead Yaz: ") + e.what());
+    out.errors.push_back(std::string("Yaz: ") + e.what());
     return;
   }
   add_stream_fields(s, st, data.size());
@@ -195,7 +195,7 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   if (trailing != 0) {
     const Bytes tail = data.subspan(st.stream_end);
     if (std::any_of(tail.begin(), tail.end(), [](u8 b) { return b != 0; }))
-      out.warnings.push_back("Sead Yaz stream is followed by " + std::to_string(trailing) +
+      out.warnings.push_back("Yaz stream is followed by " + std::to_string(trailing) +
                              " non-zero trailing bytes");
   }
 
