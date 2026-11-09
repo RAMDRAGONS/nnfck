@@ -14,9 +14,6 @@ constexpr std::size_t MaxNameLength = 0x100;
 constexpr std::size_t NodeHeaderSize = 0x20;
 constexpr std::size_t EsetEmitterCountOffset = 0x50;
 constexpr u32 NoOffset = 0xFFFFFFFF;
-// Upper bound on nodes visited along one sibling chain, so a corrupt chain
-// that loops back on itself terminates.
-constexpr std::size_t MaxChainLength = 0x100000;
 
 struct Node {
   std::size_t offset;
@@ -37,19 +34,23 @@ Node read_node(const ByteReader& r, std::size_t offset) {
               r.u16_at(offset + 0x1C)};
 }
 
-// Child and sibling offsets are relative to the node that holds them.
-std::vector<Node> read_chain(const ByteReader& r, std::size_t first) {
+// Child and sibling offsets are relative to the node that holds them. Siblings
+// may not overlap, and every chain draws on one visit budget shared by the whole
+// file, so crafted chains that revisit the same nodes cannot multiply the work.
+std::vector<Node> read_chain(const ByteReader& r, std::size_t first, std::size_t& budget) {
   std::vector<Node> nodes;
   std::size_t offset = first;
   while (true) {
-    if (nodes.size() >= MaxChainLength)
-      throw ParseError("effect node chain starting at " + fmt_hex(first) + " does not terminate");
+    if (budget == 0)
+      throw ParseError("effect node chains visit more nodes than the file can hold");
+    --budget;
     nodes.push_back(read_node(r, offset));
     const u32 sibling = nodes.back().sibling;
     if (sibling == NoOffset)
       break;
-    if (sibling == 0)
-      throw ParseError("effect node at " + fmt_hex(offset) + " names itself as its sibling");
+    if (sibling < NodeHeaderSize)
+      throw ParseError("effect node at " + fmt_hex(offset) + " has sibling offset " + fmt_hex(sibling) +
+                       ", which overlaps its own header");
     offset += sibling;
   }
   return nodes;
@@ -75,10 +76,13 @@ std::string display_magic(const std::string& magic) {
 }
 
 void add_nodes(Section& s, Analysis& out, const ByteReader& r, std::size_t first) {
-  const std::vector<Node> roots = read_chain(r, first);
+  std::size_t budget = r.size() / NodeHeaderSize;
+  const std::vector<Node> roots = read_chain(r, first, budget);
   s.add("Root Nodes", std::to_string(roots.size()));
   for (const Node& n : roots)
-    s.add(display_magic(n.magic), fmt_hex(n.offset) + ", " + std::to_string(n.child_count) + (n.child_count == 1 ? " child" : " children"), 1);
+    s.add(display_magic(n.magic),
+          fmt_hex(n.offset) + ", " + std::to_string(n.child_count) + (n.child_count == 1 ? " child" : " children"),
+          1);
 
   for (const Node& esta : roots) {
     if (esta.magic != "ESTA")
@@ -87,7 +91,7 @@ void add_nodes(Section& s, Analysis& out, const ByteReader& r, std::size_t first
     std::size_t linked = 0, sets = 0;
     u64 emitters = 0;
     if (esta.child != NoOffset) {
-      for (const Node& child : read_chain(r, esta.offset + esta.child)) {
+      for (const Node& child : read_chain(r, esta.offset + esta.child, budget)) {
         ++linked;
         if (child.magic != "ESET")
           continue;

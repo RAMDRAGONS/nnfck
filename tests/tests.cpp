@@ -217,6 +217,20 @@ void test_budget() {
   check(!b.errors.empty(), "decompression beyond the budget is refused");
 }
 
+void test_ptcl_overlapping_siblings() {
+  std::vector<u8> v(0x80);
+  std::copy_n("VFXB    ", 8, v.begin());
+  v[0xC] = 0xFF;
+  v[0xD] = 0xFE;
+  put_u16(v, 0x16, 0x40);
+  put_u32(v, 0x1C, static_cast<u32>(v.size()));
+  std::copy_n("ESTA", 4, v.begin() + 0x40);
+  put_u32(v, 0x48, 0xFFFFFFFF);
+  put_u32(v, 0x4C, 1);
+  const Analysis a = analyze(v, Context{});
+  check(!a.errors.empty(), "overlapping effect node siblings are rejected");
+}
+
 // CRC-32 (zlib polynomial) of the decoded payload, for comparison against an
 // independent decoder.
 u32 crc32(const std::vector<u8>& data) {
@@ -270,6 +284,7 @@ int main(int argc, char** argv) {
   test_trailing_bytes();
   test_sarc_rejects_overlapping_data();
   test_budget();
+  test_ptcl_overlapping_siblings();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";
