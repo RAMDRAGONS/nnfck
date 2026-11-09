@@ -138,7 +138,7 @@ void test_analysis_format_names() {
   // A Yaz stream wrapping a minimal big-endian BYML header with no root node.
   const Analysis byml = analyze(yaz_file(16, {0xFF, 'B', 'Y', 0, 2, 0, 0, 0, 0, 0xFF, 0, 0, 0, 0, 0, 0, 0, 0}),
                                 Context{});
-  check(byml.format == "Sead Yaz-compressed Binary YAML", "nested payload naming");
+  check(byml.format == "Sead Yaz-compressed Sead Binary YAML", "nested payload naming");
   check(byml.errors.empty(), "nested payload has no errors");
 }
 

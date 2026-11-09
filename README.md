@@ -11,9 +11,9 @@ modified. Every format parser lives in this tree with no external dependencies.
 | Sead Yaz | Header, full stream decode and statistics. The compressed payload is identified and reported as "Sead Yaz-compressed (format)". |
 | Sharc Archive (SARC) | Header, SFAT/SFNT validation, name hash checks |
 | NintendoWare Binary Cafe Resource (BFRES) | Wii U and Switch headers, platform, version, name |
-| Binary YAML (BYML) | Header, tables and root node |
+| Sead Binary YAML (BYML) | Header, tables and root node |
 | Havok Packfile | Header, layout rules, sections, contents class, concatenated packfiles |
-| NintendoSDK Effect Binary (PTCL: EFTB, VFXB) | header, root nodes, emitter set and emitter counts |
+| NintendoWare Effect Binary (PTCL: EFTB, VFXB) | header, root nodes, emitter set and emitter counts |
 
 The Yaz magic is printed as stored (`"Yaz0"`) and not used as the format's name:
 the trailing digit is left over from the N64, where it told cart data from disk

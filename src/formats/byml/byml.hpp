@@ -6,7 +6,7 @@
 
 namespace nnfck::byml {
 
-inline constexpr std::string_view Name = "Binary YAML";
+inline constexpr std::string_view Name = "Sead Binary YAML";
 
 bool probe(Bytes data);
 void analyze(Bytes data, Analysis& out, const Context& ctx);
