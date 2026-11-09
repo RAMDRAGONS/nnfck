@@ -7,6 +7,7 @@
 #include "formats/eft/eftb.hpp"
 #include "formats/format.hpp"
 #include "formats/sarc/sarc.hpp"
+#include "formats/xlink/xlink.hpp"
 #include "formats/yaz/yaz.hpp"
 #include "formats/zstd/zstd.hpp"
 
@@ -16,13 +17,16 @@ namespace {
 
 // Probes with longer or more specific signatures come first; BYML's two-byte
 // magic is the weakest check, so it runs last.
-constexpr std::array<FormatHandler, 7> Handlers = {{
+constexpr std::array<FormatHandler, 10> Handlers = {{
     {yaz::Name, yaz::probe, yaz::analyze},
     {zstd::Name, zstd::probe, zstd::analyze},
     {sarc::Name, sarc::probe, sarc::analyze},
     {bfres::Name, bfres::probe, bfres::analyze},
     {bntx::Name, bntx::probe, bntx::analyze},
     {eft::Name, eft::probe, eft::analyze},
+    {xlink::Name, xlink::probe, xlink::analyze},
+    {elink::Name, elink::probe, elink::analyze},
+    {slink::Name, slink::probe, slink::analyze},
     {byml::Name, byml::probe, byml::analyze},
 }};
 

@@ -51,6 +51,9 @@ add_library(nnfck_core STATIC
   src/formats/gx2/gx2.cpp
   src/formats/byml/byml.cpp
   src/formats/eft/eftb.cpp
+  src/formats/xlink/xlink.cpp
+  src/formats/xlink/elink.cpp
+  src/formats/xlink/slink.cpp
 )
 target_include_directories(nnfck_core PUBLIC src)
 target_link_libraries(nnfck_core PRIVATE nnfck_zstd)

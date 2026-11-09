@@ -8,6 +8,7 @@
 #include <string_view>
 #include <vector>
 
+#include "core/crc32.hpp"
 #include "core/file.hpp"
 #include "formats/format.hpp"
 #include "formats/yaz/yaz.hpp"
@@ -280,6 +281,157 @@ std::string field(const Analysis& a, std::string_view key) {
   return {};
 }
 
+void put_u32_le(std::vector<u8>& v, std::size_t at, u32 x) {
+  for (int i = 0; i < 4; ++i)
+    v[at + static_cast<std::size_t>(i)] = static_cast<u8>(x >> (8 * i));
+}
+
+// An XLink database with no users and one asset parameter named `param`.
+std::vector<u8> xlink_file(std::string_view param) {
+  std::vector<u8> v(0x48 + 0x14 + 0xC);
+  std::copy_n("XLNK", 4, v.begin());
+  put_u32_le(v, 0x8, 30);
+  put_u32_le(v, 0x48, static_cast<u32>(0x14 + 0xC + param.size() + 1));
+  put_u32_le(v, 0x50, 1);
+  put_u32_le(v, 0x5C + 4, 4);
+  put_u32_le(v, 0x44, static_cast<u32>(v.size()));
+  v.insert(v.end(), param.begin(), param.end());
+  v.push_back(0);
+  put_u32_le(v, 0x4, static_cast<u32>(v.size()));
+  return v;
+}
+
+// An XLink database with 64-bit positions, no users and one asset
+// parameter: a 0x60-byte header, the parameter table header, then one
+// 24-byte definition aligned to 8.
+std::vector<u8> xlink_wide_file() {
+  const u32 table = 0x60, defines = table + 0x18, strings = defines + 0x18;
+  std::vector<u8> v(strings);
+  std::copy_n("XLNK", 4, v.begin());
+  put_u32_le(v, 0x8, 33);
+  put_u32_le(v, 0x58, strings);
+  put_u32_le(v, table, strings + 7 - table);
+  put_u32_le(v, table + 0x8, 1);
+  put_u32_le(v, defines + 0x8, 4);
+  for (const char c : std::string_view("Volume"))
+    v.push_back(static_cast<u8>(c));
+  v.push_back(0);
+  put_u32_le(v, 0x4, static_cast<u32>(v.size()));
+  return v;
+}
+
+// A resource version 21 XLink database: one named user and one asset
+// parameter, with names in a shared table after the definitions.
+std::vector<u8> xlink21_file() {
+  const u32 users = 0x4C, defines = users + 8, names = defines + 8;
+  std::vector<u8> v(names);
+  std::copy_n("XLNK", 4, v.begin());
+  put_u32(v, 0x8, 21);
+  put_u32(v, 0x10, 1);
+  put_u32(v, 0x40, 1);
+  put_u32(v, 0x48, names);
+  put_u32(v, users + 4, 5);
+  put_u32(v, defines + 4, 1);
+  for (const char c : std::string_view("Eset\0Player", 11))
+    v.push_back(static_cast<u8>(c));
+  v.push_back(0);
+  put_u32(v, 0x4, static_cast<u32>(v.size()));
+  return v;
+}
+
+// An ELink database with one user owning one zeroed record.
+std::vector<u8> elink_file(std::string_view user, u32 hash) {
+  const u32 records = 0x20 + 0x14, strings = records + 0xCC;
+  std::vector<u8> v(strings);
+  std::copy_n("BLNK", 4, v.begin());
+  put_u32(v, 0x8, 0x20);
+  put_u32(v, 0xC, 1);
+  put_u32(v, 0x10, records);
+  put_u32(v, 0x14, 1);
+  put_u32(v, 0x18, strings);
+  put_u32(v, 0x20, hash);
+  put_u32(v, 0x28, 1);
+  put_u32(v, 0x2C, strings - 0x20);
+  v.insert(v.end(), user.begin(), user.end());
+  v.push_back(0);
+  put_u32(v, 0x4, static_cast<u32>(v.size()));
+  return v;
+}
+
+// An SLink database with one user holding one event and its asset.
+std::vector<u8> slink_file(u32 block_size) {
+  const u32 user = 0x14, tables = 0x3C + 0xC + 0x44;
+  std::vector<u8> v(user + tables + 4);
+  std::copy_n("SLNK", 4, v.begin());
+  put_u32(v, 0x8, 50);
+  put_u32(v, 0xC, 1);
+  put_u32(v, 0x10, user);
+  put_u32(v, user + 0x4, block_size);
+  put_u32(v, user + 0x8, static_cast<u32>(v.size()) - 0x14);
+  put_u32(v, user + 0xC, 1);
+  put_u32(v, user + 0x14, 1);
+  put_u32(v, user + 0x1C, tables);
+  for (const char c : std::string_view("User"))
+    v.push_back(static_cast<u8>(c));
+  v.push_back(0);
+  put_u32(v, 0x4, static_cast<u32>(v.size()));
+  return v;
+}
+
+// An eflk ELink database with one user holding one call table and effect.
+std::vector<u8> eflk_file(u32 pool) {
+  const u32 user = 0x18, tables = 0x1C + 0x68 + 0x14;
+  std::vector<u8> v(user + tables);
+  std::copy_n("eflk", 4, v.begin());
+  put_u32(v, 0x4, 9);
+  put_u32(v, 0x8, 1);
+  put_u32(v, 0xC, static_cast<u32>(v.size()));
+  put_u32(v, 0x10, user);
+  put_u32(v, user, 9);
+  put_u32(v, user + 0x4, 1);
+  put_u32(v, user + 0xC, 1);
+  put_u32(v, user + 0x14, pool);
+  for (const char c : std::string_view("User"))
+    v.push_back(static_cast<u8>(c));
+  v.push_back(0);
+  return v;
+}
+
+void test_link_databases() {
+  const Analysis eflk = analyze(eflk_file(0x1C + 0x68 + 0x14), Context{});
+  check(eflk.format == "Binary ELink Database" && eflk.errors.empty() && eflk.warnings.empty(),
+        "well-formed eflk ELink database is clean");
+  check(!analyze(eflk_file(0x10), Context{}).errors.empty(), "eflk user table mismatch is reported");
+
+  const Analysis slink = analyze(slink_file(0x3C + 0xC + 0x44 + 4), Context{});
+  check(slink.format == "Binary SLink Database" && slink.errors.empty() && slink.warnings.empty(),
+        "well-formed SLink database is clean");
+  check(!analyze(slink_file(0x10), Context{}).errors.empty(), "SLink user size mismatch is reported");
+
+  const Analysis effects = analyze(xlink_file("Eset"), Context{});
+  check(effects.format == "Binary XLink Database (ELink2)" && effects.errors.empty() && effects.warnings.empty(),
+        "XLink effect database is identified by its parameters");
+  check(analyze(xlink_file("Volume"), Context{}).format == "Binary XLink Database (SLink2)",
+        "XLink sound database is identified by its parameters");
+  check(analyze(xlink_file("Other"), Context{}).format == "Binary XLink Database",
+        "unrecognized XLink system is not named");
+
+  const Analysis wide = analyze(xlink_wide_file(), Context{});
+  check(wide.format == "Binary XLink Database (SLink2)" && wide.errors.empty() && wide.warnings.empty() &&
+            field(wide, "Position Width") == "64-bit",
+        "XLink database with 64-bit positions is read");
+
+  const Analysis named = analyze(xlink21_file(), Context{});
+  check(named.format == "Binary XLink Database (ELink2)" && named.errors.empty() && named.warnings.empty() &&
+            named.sections.size() == 3,
+        "XLink version 21 lists its named users");
+
+  const Analysis elink = analyze(elink_file("Player", crc32("Player")), Context{});
+  check(elink.format == "Binary ELink Database" && elink.errors.empty() && elink.warnings.empty(),
+        "well-formed ELink database is clean");
+  check(analyze(elink_file("Player", 0), Context{}).warnings.size() == 1, "ELink user hash mismatch is reported");
+}
+
 void test_zstd() {
   const std::vector<u8> byml{'B', 'Y', 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   const Analysis a = analyze(zstd_frame(byml), Context{});
@@ -312,25 +464,6 @@ void test_zstd() {
         "zstd decompression beyond the budget is refused");
 }
 
-// CRC-32 (zlib polynomial) of the decoded payload, for comparison against an
-// independent decoder.
-u32 crc32(const std::vector<u8>& data) {
-  static const auto table = [] {
-    std::vector<u32> t(256);
-    for (u32 i = 0; i < 256; ++i) {
-      u32 c = i;
-      for (int k = 0; k < 8; ++k)
-        c = (c & 1) ? 0xEDB88320u ^ (c >> 1) : c >> 1;
-      t[i] = c;
-    }
-    return t;
-  }();
-  u32 c = 0xFFFFFFFFu;
-  for (const u8 b : data)
-    c = table[(c ^ b) & 0xFF] ^ (c >> 8);
-  return c ^ 0xFFFFFFFFu;
-}
-
 int hash_files(int argc, char** argv) {
   int status = 0;
   for (int i = 2; i < argc; ++i) {
@@ -338,7 +471,7 @@ int hash_files(int argc, char** argv) {
       const auto file = read_file(std::filesystem::path(argv[i]));
       yaz::StreamStats st;
       const auto out = decode(file, st);
-      std::printf("%08x %s\n", crc32(out), argv[i]);
+      std::printf("%08x %s\n", crc32(Bytes(out)), argv[i]);
     } catch (const std::exception& e) {
       std::printf("error %s: %s\n", argv[i], e.what());
       status = 1;
@@ -369,6 +502,7 @@ int main(int argc, char** argv) {
   test_budget();
   test_ptcl_overlapping_siblings();
   test_zstd();
+  test_link_databases();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";
