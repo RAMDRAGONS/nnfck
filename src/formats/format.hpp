@@ -29,9 +29,13 @@ struct Context {
   int depth = 0;
   // Unlimited when null.
   Budget* budget = nullptr;
+  // Containers list their members only for the input itself (or the payload a
+  // compressed input wraps); members are identified, never listed.
+  bool list_members = true;
   static constexpr int MaxDepth = 8;
 
-  Context nested() const { return Context{depth + 1, budget}; }
+  Context member() const { return Context{depth + 1, budget, false}; }
+  Context payload() const { return Context{depth + 1, budget, list_members}; }
   bool charge(u64 bytes) const { return budget == nullptr || budget->charge(bytes); }
 };
 
@@ -42,6 +46,13 @@ struct FormatHandler {
 };
 
 const FormatHandler* identify(Bytes data);
+
+// One-line identification of a container member, analyzed one level deeper.
+std::string member_format(Bytes data, const Context& ctx);
+
+// Header row and member rows for container file listings.
+std::string member_header();
+std::string member_row(u64 offset, u64 size, std::string_view name, std::string_view format);
 
 // Analyzes `data` with whichever handler claims it. Unclaimed data yields an
 // "Unknown" analysis with a short hex preview rather than an error.

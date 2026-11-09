@@ -210,6 +210,12 @@ void test_sarc_rejects_overlapping_data() {
   check(analyze(file, Context{}).errors.empty(), "well-formed SARC has no errors");
 }
 
+void test_members_listed_one_layer_deep() {
+  const auto file = sarc_file(2, 0x10);
+  check(analyze(file, Context{}).sections.size() == 2, "input SARC lists its members");
+  check(analyze(file, Context{}.member()).sections.size() == 1, "member SARC is identified without a listing");
+}
+
 void test_budget() {
   const auto file = sarc_file(4, 0x100);
   Budget budget{file.size() + 0x180};
@@ -294,6 +300,7 @@ int main(int argc, char** argv) {
   test_trailing_bytes();
   test_sanitize();
   test_sarc_rejects_overlapping_data();
+  test_members_listed_one_layer_deep();
   test_budget();
   test_ptcl_overlapping_siblings();
 

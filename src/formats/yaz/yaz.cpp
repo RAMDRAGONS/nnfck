@@ -199,7 +199,7 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
                              " non-zero trailing bytes");
   }
 
-  Analysis inner = analyze(Bytes(payload), ctx.nested());
+  Analysis inner = analyze(Bytes(payload), ctx.payload());
   if (inner.format == "Unknown")
     out.format = "Sead Yaz-compressed unknown data";
   else if (inner.format == "Empty")

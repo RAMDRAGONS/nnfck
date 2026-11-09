@@ -30,15 +30,6 @@ void require_size(Analysis& out, std::string_view what, u32 actual, std::size_t 
                          ", which loaders reject");
 }
 
-std::string payload_format(Bytes file, const Context& ctx) {
-  const Analysis a = nnfck::analyze(file, ctx.nested());
-  if (a.format == "Unknown")
-    return "Unknown data";
-  if (!a.errors.empty())
-    return a.format + ", corrupt";
-  return a.format;
-}
-
 u32 hash_name(u32 multiplier, std::string_view name) {
   u32 hash = 0;
   for (const char c : name)
@@ -164,16 +155,15 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     out.errors.push_back(std::to_string(bad_ordinals) +
                          " SFAT name fields carry the wrong collision index for their hash");
 
-  if (entries.empty())
+  if (entries.empty() || !ctx.list_members)
     return;
   Section& files = out.section(std::string(Name) + " Files");
-  files.add("", "Offset      Size        Name");
+  files.add("", member_header());
   for (const Entry& e : entries) {
     const std::size_t at = std::size_t(data_offset) + e.begin;
     const Bytes file = data.subspan(at, e.end - e.begin);
     const std::string name = e.name_field != 0 ? e.name : "(unnamed, hash " + fmt_hex(e.hash, 8) + ")";
-    files.add("", fmt_hex(at, 8) + "  " + fmt_hex(file.size(), 8) + "  " + name + "  [" +
-                      payload_format(file, ctx) + "]");
+    files.add("", member_row(at, file.size(), name, member_format(file, ctx)));
   }
 }
 

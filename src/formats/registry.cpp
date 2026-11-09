@@ -70,4 +70,22 @@ Analysis analyze(Bytes data, const Context& ctx) {
   return out;
 }
 
+std::string member_format(Bytes data, const Context& ctx) {
+  const Analysis a = analyze(data, ctx.member());
+  if (a.format == "Unknown")
+    return "Unknown data";
+  if (!a.errors.empty())
+    return a.format + ", corrupt";
+  return a.format;
+}
+
+std::string member_header() {
+  return "Offset      Size        Name";
+}
+
+std::string member_row(u64 offset, u64 size, std::string_view name, std::string_view format) {
+  return fmt_hex(offset, 8) + "  " + fmt_hex(size, 8) + "  " + std::string(name) + "  [" + std::string(format) +
+         "]";
+}
+
 }  // namespace nnfck
