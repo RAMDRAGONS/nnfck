@@ -22,7 +22,7 @@ std::string cafe_string(const ByteReader& r, std::size_t field) {
 
 // Index groups: node 0 is the root of the lookup tree; nodes 1..count hold
 // the entries.
-std::vector<ListEntry> cafe_dict(const ByteReader& r, std::size_t field) {
+std::vector<ListEntry> cafe_dict(const ByteReader& r, std::size_t field, const Context& ctx) {
   std::vector<ListEntry> entries;
   const u64 dict = cafe_offset(r, field);
   if (dict == 0)
@@ -33,6 +33,7 @@ std::vector<ListEntry> cafe_dict(const ByteReader& r, std::size_t field) {
   for (s32 i = 1; i <= count; ++i) {
     const std::size_t node = static_cast<std::size_t>(dict) + 8 + static_cast<std::size_t>(i) * DictNodeSize;
     entries.push_back({cafe_string(r, node + 8), cafe_offset(r, node + 12), {}});
+    ctx.spend(DictNodeSize + entries.back().name.size(), "index group names");
   }
   return entries;
 }
@@ -48,7 +49,8 @@ void expect_count(Analysis& out, const std::string& owner, const char* what, u32
                            " but its index group lists " + std::to_string(listed));
 }
 
-std::string model(const ByteReader& r, Analysis& out, std::size_t at, const std::string& name) {
+std::string model(const ByteReader& r, Analysis& out, std::size_t at, const std::string& name,
+                  const Context& ctx) {
   const u16 vertex_count = r.u16_at(at + 0x20);
   const u16 shape_count = r.u16_at(at + 0x22);
   const u16 material_count = r.u16_at(at + 0x24);
@@ -65,6 +67,8 @@ std::string model(const ByteReader& r, Analysis& out, std::size_t at, const std:
   parts.push_back(count_of(material_count, "material"));
 
   const u64 vertices = cafe_offset(r, at + 0x10);
+  // Models may share one vertex buffer array, so each walk is charged.
+  ctx.spend(u64{vertex_count} * VertexStride, "vertex buffers");
   u64 total = 0;
   for (u16 i = 0; i < vertex_count && vertices != 0; ++i) {
     const std::size_t v = static_cast<std::size_t>(vertices) + std::size_t(i) * VertexStride;
@@ -190,9 +194,9 @@ std::string scene_anim(const ByteReader& r, Analysis& out, std::size_t at, const
 enum class Kind { Model, Texture, Skeletal, ShaderParam, TexPattern, BoneVis, MatVis, Shape, Scene };
 
 std::string describe(const ByteReader& r, Analysis& out, Kind kind, std::size_t at, const std::string& name,
-                     bool legacy) {
+                     bool legacy, const Context& ctx) {
   switch (kind) {
-  case Kind::Model: return model(r, out, at, name);
+  case Kind::Model: return model(r, out, at, name, ctx);
   case Kind::Texture: return texture(r, at);
   case Kind::Skeletal: return skeletal_anim(r, at, legacy);
   case Kind::ShaderParam: return shader_param_anim(r, at, legacy);
@@ -282,7 +286,7 @@ void analyze_cafe(ByteReader& r, Analysis& out, const Context& ctx) {
 
   std::vector<Group> groups;
   for (const CafeGroup& g : layout) {
-    Group group{g.label, cafe_dict(r, g.field)};
+    Group group{g.label, cafe_dict(r, g.field, ctx)};
     check_count(g.field, g.magic, group.entries.size());
     for (ListEntry& e : group.entries) {
       const std::size_t at = static_cast<std::size_t>(e.data);
@@ -294,13 +298,15 @@ void analyze_cafe(ByteReader& r, Analysis& out, const Context& ctx) {
                                g.magic + " block");
         continue;
       }
-      if (const std::string own = cafe_string(r, at + name_field(g.kind)); own != e.name)
+      const std::string own = cafe_string(r, at + name_field(g.kind));
+      ctx.spend(own.size(), "block names");
+      if (own != e.name)
         out.warnings.push_back("BFRES " + std::string(g.magic) + " block named \"" + own + "\" is indexed as \"" +
                                e.name + "\"");
       if (!ctx.list_members)
         continue;
       if (anim_layout_known || g.kind == Kind::Model || g.kind == Kind::Texture)
-        e.detail = describe(r, out, g.kind, at, e.name, legacy_anims);
+        e.detail = describe(r, out, g.kind, at, e.name, legacy_anims, ctx);
       else
         anims_skipped = true;
     }
@@ -309,7 +315,7 @@ void analyze_cafe(ByteReader& r, Analysis& out, const Context& ctx) {
   if (anims_skipped)
     out.warnings.push_back("Wii U BFRES " + std::to_string(v[0]) + "." + std::to_string(v[1]) +
                            " animation layouts are unknown; animations are listed by name only");
-  const std::vector<ListEntry> externals = cafe_dict(r, scene_field + 4);
+  const std::vector<ListEntry> externals = cafe_dict(r, scene_field + 4, ctx);
   check_count(scene_field + 4, "external file", externals.size());
   if (!ctx.list_members)
     return;

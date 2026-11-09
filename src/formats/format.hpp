@@ -37,6 +37,11 @@ struct Context {
   Context member() const { return Context{depth + 1, budget, false}; }
   Context payload() const { return Context{depth + 1, budget, list_members}; }
   bool charge(u64 bytes) const { return budget == nullptr || budget->charge(bytes); }
+  // For work that cannot be skipped piecemeal: stops the parse instead.
+  void spend(u64 bytes, std::string_view what) const {
+    if (!charge(bytes))
+      throw ParseError("analysis budget exhausted while reading " + std::string(what));
+  }
 };
 
 struct FormatHandler {

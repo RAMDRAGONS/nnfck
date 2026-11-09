@@ -123,8 +123,10 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     if (count < 0 || static_cast<u32>(count) != texture_count)
       out.warnings.push_back("BNTX dictionary names " + std::to_string(count) + " textures but the container holds " +
                              std::to_string(texture_count));
-    for (s32 i = 1; i <= count && static_cast<u32>(i) <= texture_count; ++i)
+    for (s32 i = 1; i <= count && static_cast<u32>(i) <= texture_count; ++i) {
       names.push_back(bntx_string(r, r.u64_at(dic + 8 + static_cast<std::size_t>(i) * DictNodeSize + 8)));
+      ctx.spend(DictNodeSize + names.back().size(), "dictionary names");
+    }
   }
 
   if (texture_count != 0)
@@ -138,6 +140,8 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     }
     const std::size_t t = static_cast<std::size_t>(at);
     const std::string name = bntx_string(r, r.u64_at(t + 0x60));
+    // Many pointers may name the same texture block.
+    ctx.spend(TextureSize + name.size(), "texture blocks");
     if (i < names.size() && names[i] != name)
       out.warnings.push_back("BNTX texture named \"" + name + "\" is listed as \"" + names[i] + "\"");
     if (ctx.list_members)

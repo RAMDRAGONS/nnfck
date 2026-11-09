@@ -90,7 +90,7 @@ std::string nx_string(const ByteReader& r, u64 at) {
   return std::string(s.begin(), s.end());
 }
 
-std::vector<ListEntry> nx_dict(const ByteReader& r, Analysis& out, std::size_t field) {
+std::vector<ListEntry> nx_dict(const ByteReader& r, Analysis& out, std::size_t field, const Context& ctx) {
   std::vector<ListEntry> entries;
   const u64 dict = r.u64_at(field);
   if (dict == 0)
@@ -106,6 +106,7 @@ std::vector<ListEntry> nx_dict(const ByteReader& r, Analysis& out, std::size_t f
   for (s32 i = 1; i <= count; ++i) {
     const std::size_t node = static_cast<std::size_t>(dict) + 8 + static_cast<std::size_t>(i) * DictNodeSize;
     entries.push_back({nx_string(r, r.u64_at(node + 8)), 0, {}});
+    ctx.spend(DictNodeSize + entries.back().name.size(), "dictionary names");
   }
   return entries;
 }
@@ -125,7 +126,8 @@ void expect_count(Analysis& out, const std::string& owner, const char* what, u32
                            " but its dictionary names " + std::to_string(listed));
 }
 
-std::string model(const ByteReader& r, const NxLayout& l, Analysis& out, std::size_t at, const std::string& name) {
+std::string model(const ByteReader& r, const NxLayout& l, Analysis& out, std::size_t at, const std::string& name,
+                  const Context& ctx) {
   const u16 vertex_count = r.u16_at(at + l.model_vertex_count);
   const u16 shape_count = r.u16_at(at + l.model_shape_count);
   const u16 material_count = r.u16_at(at + l.model_material_count);
@@ -142,6 +144,8 @@ std::string model(const ByteReader& r, const NxLayout& l, Analysis& out, std::si
   parts.push_back(count_of(material_count, "material"));
 
   const u64 vertices = r.u64_at(at + l.model_vertices);
+  // Models may share one vertex buffer array, so each walk is charged.
+  ctx.spend(u64{vertex_count} * l.vertex_stride, "vertex buffers");
   u64 total = 0;
   for (u16 i = 0; i < vertex_count && vertices != 0; ++i) {
     const std::size_t v = static_cast<std::size_t>(vertices) + std::size_t(i) * l.vertex_stride;
@@ -216,9 +220,9 @@ std::size_t stride(const NxLayout& l, Kind kind) {
 }
 
 std::string describe(const ByteReader& r, const NxLayout& l, Analysis& out, Kind kind, std::size_t at,
-                     const std::string& name) {
+                     const std::string& name, const Context& ctx) {
   switch (kind) {
-  case Kind::Model: return model(r, l, out, at, name);
+  case Kind::Model: return model(r, l, out, at, name, ctx);
   case Kind::Skeletal: return skeletal_anim(r, l, at);
   case Kind::Material: return material_anim(r, l, at);
   case Kind::BoneVis: return bone_vis_anim(r, l, at);
@@ -313,7 +317,7 @@ void analyze_nx(ByteReader& r, Analysis& out, const Context& ctx) {
   std::vector<Group> groups;
   for (std::size_t i = 0; i < std::size(groups_layout); ++i) {
     const NxGroup& g = groups_layout[i];
-    Group group{g.label, nx_dict(r, out, g.dict_field)};
+    Group group{g.label, nx_dict(r, out, g.dict_field, ctx)};
     const u16 declared = count_at(i);
     if (group.entries.size() != declared)
       out.warnings.push_back("BFRES header counts " + std::to_string(declared) + " " + g.magic +
@@ -333,11 +337,13 @@ void analyze_nx(ByteReader& r, Analysis& out, const Context& ctx) {
         break;
       }
       e.data = at;
-      if (const std::string own = nx_string(r, r.u64_at(at + layout->name)); own != e.name)
+      const std::string own = nx_string(r, r.u64_at(at + layout->name));
+      ctx.spend(own.size(), "block names");
+      if (own != e.name)
         out.warnings.push_back("BFRES " + std::string(g.magic) + " block named \"" + own +
                                "\" is listed as \"" + e.name + "\"");
       if (ctx.list_members)
-        e.detail = describe(r, *layout, out, g.kind, at, e.name);
+        e.detail = describe(r, *layout, out, g.kind, at, e.name, ctx);
     }
     groups.push_back(std::move(group));
   }
@@ -348,7 +354,7 @@ void analyze_nx(ByteReader& r, Analysis& out, const Context& ctx) {
   // External files are a parallel array of {u64 offset, u32 size, padding}
   // entries named by their own dictionary.
   const u64 external_array = r.u64_at(o + 0x60 + pool_shift);
-  const std::vector<ListEntry> external_names = nx_dict(r, out, o + 0x68 + pool_shift);
+  const std::vector<ListEntry> external_names = nx_dict(r, out, o + 0x68 + pool_shift, ctx);
   const u16 external_count = count_at(6);
   std::vector<std::pair<u64, u64>> spans;
   if (external_array != 0) {

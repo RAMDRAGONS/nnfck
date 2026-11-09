@@ -102,7 +102,9 @@ bool decompress(Bytes data, std::size_t end, u64 declared, bool sizes_known, std
       const std::size_t step = sizes_known && declared > produced
                                    ? static_cast<std::size_t>(declared) - produced
                                    : GrowStep;
-      if (!sizes_known && !ctx.charge(step)) {
+      // Declared sizes were charged up front; growth past them, or any growth
+      // for undeclared sizes, is charged as it happens.
+      if ((!sizes_known || produced >= declared) && !ctx.charge(step)) {
         out.errors.push_back("analysis budget exhausted after decompressing " + fmt_hex(produced) + " bytes");
         return false;
       }
@@ -164,6 +166,8 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
     ++compressed_frames;
     if (f.header.frameContentSize == ZSTD_CONTENTSIZE_UNKNOWN)
       sizes_known = false;
+    else if (f.header.frameContentSize > ~u64{0} - declared)
+      throw ParseError("frame content sizes add up to more than 64 bits can hold");
     else
       declared += f.header.frameContentSize;
     if (dict_id == 0)

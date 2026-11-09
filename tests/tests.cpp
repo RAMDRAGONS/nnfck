@@ -227,6 +227,10 @@ void test_budget() {
         ++not_analyzed;
   check(not_analyzed == 3, "members beyond the budget are not analyzed");
 
+  Budget spent{0x10};
+  check(throws_parse_error([&] { Context{0, &spent}.spend(0x11, "test"); }), "work beyond the budget stops a parse");
+  check(!throws_parse_error([&] { Context{0, &spent}.spend(0x10, "test"); }), "work within the budget proceeds");
+
   Budget tiny{0x10};
   const auto yaz = yaz_file(0x100, {0x80, 'a', 0x00, 0x00, 0xFF});
   const Analysis b = analyze(yaz, Context{0, &tiny});
