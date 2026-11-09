@@ -50,7 +50,6 @@ add_library(nnfck_core STATIC
   src/formats/gfx/gfx.cpp
   src/formats/gx2/gx2.cpp
   src/formats/byml/byml.cpp
-  src/formats/havok/packfile.cpp
   src/formats/eft/eftb.cpp
 )
 target_include_directories(nnfck_core PUBLIC src)
