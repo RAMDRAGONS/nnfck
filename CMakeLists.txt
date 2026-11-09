@@ -21,6 +21,12 @@ add_library(nnfck_core STATIC
   src/formats/yaz/yaz.cpp
   src/formats/sarc/sarc.cpp
   src/formats/bfres/bfres.cpp
+  src/formats/bfres/common.cpp
+  src/formats/bfres/cafe.cpp
+  src/formats/bfres/nx.cpp
+  src/formats/bntx/bntx.cpp
+  src/formats/gfx/gfx.cpp
+  src/formats/gx2/gx2.cpp
   src/formats/byml/byml.cpp
   src/formats/havok/packfile.cpp
   src/formats/eft/eftb.cpp

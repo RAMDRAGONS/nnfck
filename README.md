@@ -10,7 +10,8 @@ modified. Every format parser lives in this tree with no external dependencies.
 | --- | --- |
 | Sead Yaz | Header, full stream decode and statistics. The compressed payload is identified and reported as "Sead Yaz-compressed (format)". |
 | Sharc Archive (SARC) | Header, SFAT/SFNT validation, name hash checks |
-| NintendoWare Binary Cafe Resource (BFRES) | Wii U and Switch headers, platform, version, name |
+| NintendoWare Binary Cafe Resource (BFRES) | Wii U and Switch headers, every model, texture and animation with a one-line summary, embedded files |
+| Binary Nintendo Texture (BNTX) | Header and every texture: size, format, mips, dimension, tiling, channel mapping |
 | Sead Binary YAML (BYML) | Header, tables and root node |
 | Havok Packfile | Header, layout rules, sections, contents class, concatenated packfiles |
 | NintendoWare Effect Binary (PTCL: EFTB, VFXB) | header, root nodes, emitter set and emitter counts |

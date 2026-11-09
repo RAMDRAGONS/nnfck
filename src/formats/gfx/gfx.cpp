@@ -1,0 +1,64 @@
+#include "formats/gfx/gfx.hpp"
+
+#include <iterator>
+
+#include "core/report.hpp"
+
+namespace nnfck::gfx {
+
+namespace {
+
+constexpr u32 TypeFormatBits = 8;
+
+constexpr const char* ChannelFormats[] = {
+    "Undefined", "R4_G4", "R8", "R4_G4_B4_A4", "A4_B4_G4_R4", "R5_G5_B5_A1", "A1_B5_G5_R5", "R5_G6_B5", "B5_G6_R5", "R8_G8", "R16", "R8_G8_B8_A8", "B8_G8_R8_A8", "R9_G9_B9_E5", "R10_G10_B10_A2", "R11_G11_B10", "B10_G11_R11", "R10_G11_B11", "R16_G16", "R24_G8", "R32", "R16_G16_B16_A16", "R32_G8_X24", "R32_G32", "R32_G32_B32", "R32_G32_B32_A32", "Bc1", "Bc2", "Bc3", "Bc4", "Bc5", "Bc6", "Bc7", "Eac_R11", "Eac_R11_G11", "Etc1", "Etc2", "Etc2_Mask", "Etc2_Alpha", "Pvrtc1_2Bpp", "Pvrtc1_4Bpp", "Pvrtc1_Alpha_2Bpp", "Pvrtc1_Alpha_4Bpp", "Pvrtc2_Alpha_2Bpp", "Pvrtc2_Alpha_4Bpp", "Astc_4x4", "Astc_5x4", "Astc_5x5", "Astc_6x5", "Astc_6x6", "Astc_8x5", "Astc_8x6", "Astc_8x8", "Astc_10x5", "Astc_10x6", "Astc_10x8", "Astc_10x10", "Astc_12x10", "Astc_12x12", "B5_G5_R5_A1"};
+
+constexpr const char* TypeFormats[] = {
+    "Undefined", "Unorm", "Snorm", "Uint", "Sint", "Float", "UnormSrgb", "DepthStencil", "UintToFloat", "SintToFloat", "Ufloat"};
+
+constexpr const char* ImageDimensions[] = {
+    "1d", "2d", "3d", "CubeMap", "1dArray", "2dArray", "2dMultisample", "2dMultisampleArray", "CubeMapArray"};
+
+constexpr const char* ImageStorageDimensions[] = {
+    "Undefined", "1d", "2d", "3d"};
+
+constexpr const char* TileModes[] = {"Optimal", "Linear"};
+
+// Zero, One, Red, Green, Blue, Alpha.
+constexpr char ChannelSources[] = {'0', '1', 'R', 'G', 'B', 'A'};
+
+template <std::size_t N>
+std::string lookup(const char* const (&table)[N], u32 value) {
+  return value < N ? std::string(table[value]) : "Unknown (" + fmt_hex(value) + ")";
+}
+
+}  // namespace
+
+std::string image_format_name(u32 format) {
+  const u32 channel = format >> TypeFormatBits;
+  const u32 type = format & ((1u << TypeFormatBits) - 1);
+  if (channel >= std::size(ChannelFormats) || type >= std::size(TypeFormats))
+    return "Unknown (" + fmt_hex(format) + ")";
+  return std::string(ChannelFormats[channel]) + "_" + TypeFormats[type];
+}
+
+std::string image_dimension_name(u32 dimension) {
+  return lookup(ImageDimensions, dimension);
+}
+
+std::string image_storage_dimension_name(u32 dimension) {
+  return lookup(ImageStorageDimensions, dimension);
+}
+
+std::string tile_mode_name(u32 mode) {
+  return lookup(TileModes, mode);
+}
+
+std::string channel_mapping_name(Bytes mapping) {
+  std::string out;
+  for (const u8 m : mapping)
+    out.push_back(m < std::size(ChannelSources) ? ChannelSources[m] : '?');
+  return out;
+}
+
+}  // namespace nnfck::gfx
