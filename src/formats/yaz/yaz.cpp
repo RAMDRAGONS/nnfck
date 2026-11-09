@@ -199,14 +199,7 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
                              " non-zero trailing bytes");
   }
 
-  Analysis inner = analyze(Bytes(payload), ctx.payload());
-  if (inner.format == "Unknown")
-    out.format = "Sead Yaz-compressed unknown data";
-  else if (inner.format == "Empty")
-    out.format = "Sead Yaz-compressed empty data";
-  else
-    out.format = "Sead Yaz-compressed " + inner.format;
-  out.absorb(std::move(inner));
+  absorb_payload(out, Name, analyze(Bytes(payload), ctx.payload()));
 }
 
 }  // namespace nnfck::yaz

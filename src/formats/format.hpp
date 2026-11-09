@@ -54,6 +54,10 @@ std::string member_format(Bytes data, const Context& ctx);
 std::string member_header();
 std::string member_row(u64 offset, u64 size, std::string_view name, std::string_view format);
 
+// Names a compressed input after its payload ("<compression>-compressed
+// <format>") and merges the payload's analysis into `out`.
+void absorb_payload(Analysis& out, std::string_view compression, Analysis&& inner);
+
 // Analyzes `data` with whichever handler claims it. Unclaimed data yields an
 // "Unknown" analysis with a short hex preview rather than an error.
 Analysis analyze(Bytes data, const Context& ctx);

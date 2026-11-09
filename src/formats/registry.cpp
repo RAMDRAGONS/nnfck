@@ -9,6 +9,7 @@
 #include "formats/havok/packfile.hpp"
 #include "formats/sarc/sarc.hpp"
 #include "formats/yaz/yaz.hpp"
+#include "formats/zstd/zstd.hpp"
 
 namespace nnfck {
 
@@ -16,8 +17,9 @@ namespace {
 
 // Probes with longer or more specific signatures come first; BYML's two-byte
 // magic is the weakest check, so it runs last.
-constexpr std::array<FormatHandler, 7> Handlers = {{
+constexpr std::array<FormatHandler, 8> Handlers = {{
     {yaz::Name, yaz::probe, yaz::analyze},
+    {zstd::Name, zstd::probe, zstd::analyze},
     {sarc::Name, sarc::probe, sarc::analyze},
     {bfres::Name, bfres::probe, bfres::analyze},
     {bntx::Name, bntx::probe, bntx::analyze},
@@ -79,6 +81,16 @@ std::string member_format(Bytes data, const Context& ctx) {
   if (!a.errors.empty())
     return a.format + ", corrupt";
   return a.format;
+}
+
+void absorb_payload(Analysis& out, std::string_view compression, Analysis&& inner) {
+  std::string what = inner.format;
+  if (what == "Unknown")
+    what = "unknown data";
+  else if (what == "Empty")
+    what = "empty data";
+  out.format = std::string(compression) + "-compressed " + what;
+  out.absorb(std::move(inner));
 }
 
 std::string member_header() {

@@ -247,6 +247,67 @@ void test_ptcl_overlapping_siblings() {
   check(!a.errors.empty(), "overlapping effect node siblings are rejected");
 }
 
+// One Zstandard frame holding `payload` as a single raw block. Without a
+// declared size the frame needs a window descriptor instead.
+std::vector<u8> zstd_frame(const std::vector<u8>& payload, bool declare_size = true, u8 dict_id = 0) {
+  std::vector<u8> v{0x28, 0xB5, 0x2F, 0xFD};
+  if (declare_size) {
+    v.push_back(static_cast<u8>(0x20 | (dict_id != 0 ? 0x01 : 0x00)));
+    if (dict_id != 0)
+      v.push_back(dict_id);
+    v.push_back(static_cast<u8>(payload.size()));
+  } else {
+    v.push_back(0x00);
+    v.push_back(0x00);
+  }
+  const u32 block = static_cast<u32>(payload.size()) << 3 | 1;
+  v.push_back(static_cast<u8>(block));
+  v.push_back(static_cast<u8>(block >> 8));
+  v.push_back(static_cast<u8>(block >> 16));
+  v.insert(v.end(), payload.begin(), payload.end());
+  return v;
+}
+
+std::string field(const Analysis& a, std::string_view key) {
+  for (const Section& s : a.sections)
+    for (const Field& f : s.fields())
+      if (f.key == key)
+        return f.value;
+  return {};
+}
+
+void test_zstd() {
+  const std::vector<u8> byml{'B', 'Y', 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+  const Analysis a = analyze(zstd_frame(byml), Context{});
+  check(a.format == "Zstandard-compressed Sead Binary YAML" && a.errors.empty(), "zstd payload naming");
+
+  const Analysis unsized = analyze(zstd_frame({'a', 'b', 'c'}, false), Context{});
+  check(unsized.format == "Zstandard-compressed unknown data" && unsized.errors.empty(),
+        "zstd frame without a declared size decodes");
+
+  auto two = zstd_frame({'a', 'b', 'c'});
+  const auto second = zstd_frame({'d', 'e'}, false);
+  two.insert(two.end(), second.begin(), second.end());
+  const Analysis multi = analyze(two, Context{});
+  check(field(multi, "Frames") == "2" && field(multi, "Decompressed Size") == fmt_size(5) && multi.errors.empty(),
+        "zstd frames are decoded in sequence");
+
+  const Analysis dict = analyze(zstd_frame({'a'}, true, 7), Context{});
+  check(dict.format == "Zstandard (not decompressed)" && !dict.errors.empty(), "zstd dictionary frames are refused");
+
+  auto cut = zstd_frame({'a', 'b', 'c', 'd'});
+  cut.pop_back();
+  check(!analyze(cut, Context{}).errors.empty(), "truncated zstd frame is reported");
+
+  auto padded = zstd_frame({'a'});
+  padded.push_back(0);
+  check(analyze(padded, Context{}).warnings.size() == 1, "bytes after the last zstd frame are a warning");
+
+  Budget tiny{0x14};
+  check(!analyze(zstd_frame(std::vector<u8>(0x40, 'x')), Context{0, &tiny}).errors.empty(),
+        "zstd decompression beyond the budget is refused");
+}
+
 // CRC-32 (zlib polynomial) of the decoded payload, for comparison against an
 // independent decoder.
 u32 crc32(const std::vector<u8>& data) {
@@ -303,6 +364,7 @@ int main(int argc, char** argv) {
   test_members_listed_one_layer_deep();
   test_budget();
   test_ptcl_overlapping_siblings();
+  test_zstd();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";
