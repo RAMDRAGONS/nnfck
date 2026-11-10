@@ -36,7 +36,9 @@ target_compile_definitions(nnfck_zstd PRIVATE ZSTD_DISABLE_ASM)
 target_include_directories(nnfck_zstd SYSTEM PUBLIC ${ZSTD_LIB})
 
 add_library(nnfck_core STATIC
+  src/core/data.cpp
   src/core/file.cpp
+  src/core/json.cpp
   src/core/report.cpp
   src/core/xml.cpp
   src/formats/registry.cpp

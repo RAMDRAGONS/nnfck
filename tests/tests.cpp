@@ -11,6 +11,7 @@
 
 #include "core/crc32.hpp"
 #include "core/file.hpp"
+#include "core/json.hpp"
 #include "formats/format.hpp"
 #include "formats/yaz/yaz.hpp"
 
@@ -730,6 +731,23 @@ void test_link_databases() {
   check(analyze(elink_file("Player", 0), Context{}).warnings.size() == 1, "EffectLink user hash mismatch is reported");
 }
 
+void test_json() {
+  const auto parse = [](std::string_view text) {
+    return json::parse(Bytes(reinterpret_cast<const u8*>(text.data()), text.size()));
+  };
+  const json::Value doc = parse(R"({"a": [1.5, true, false, null, "xé😀\n"], "b": {}})");
+  const json::Value* a = doc.member("a");
+  check(a != nullptr && a->items.size() == 5 && a->items[0].number == 1.5 && a->items[1].boolean &&
+            !a->items[2].boolean && a->items[3].is(json::Value::Kind::Null) &&
+            a->items[4].string == "x\xC3\xA9\xF0\x9F\x98\x80\n",
+        "JSON values and escapes decode");
+  check(doc.member("b") != nullptr && doc.member("b")->is(json::Value::Kind::Object), "JSON nested object");
+  check(throws_parse_error([&] { parse(R"({"a": 1} x)"); }), "JSON rejects trailing content");
+  check(throws_parse_error([&] { parse(R"(["\ud83d"])"); }), "JSON rejects an unpaired surrogate");
+  check(throws_parse_error([&] { parse(std::string(json::MaxDepth + 2, '[')); }), "JSON nesting is bounded");
+  check(throws_parse_error([&] { parse("[1,]"); }), "JSON rejects a trailing comma");
+}
+
 void test_zstd() {
   const std::vector<u8> byml{'B', 'Y', 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
   const Analysis a = analyze(zstd_frame(byml), Context{});
@@ -804,6 +822,7 @@ int main(int argc, char** argv) {
   test_layouts();
   test_layout_sources();
   test_intermediates();
+  test_json();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " check(s) failed\n";
