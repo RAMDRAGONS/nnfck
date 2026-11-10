@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.20)
 project(nnfck VERSION 0.1.0 LANGUAGES C CXX)
 
+include(GNUInstallDirs)
+
 if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
   message(WARNING "nnfck is built with LLVM clang; configure with a preset or -DCMAKE_TOOLCHAIN_FILE=cmake/llvm.cmake")
 endif()
@@ -74,6 +76,10 @@ add_library(nnfck_core STATIC
   src/formats/xlink/xlink.cpp
   src/formats/xlink/elink.cpp
   src/formats/xlink/slink.cpp
+  src/formats/pmaa/common.cpp
+  src/formats/pmaa/pmaa.cpp
+  src/formats/pmaa/text.cpp
+  src/formats/pmaa/names.cpp
 )
 target_include_directories(nnfck_core PUBLIC src)
 target_link_libraries(nnfck_core PRIVATE nnfck_zstd)
@@ -94,10 +100,23 @@ add_executable(nnfck src/main.cpp)
 target_link_libraries(nnfck PRIVATE nnfck_core)
 target_compile_definitions(nnfck PRIVATE NNFCK_VERSION="${PROJECT_VERSION}")
 
+# Data files are looked up beside the executable, so builds can run in place,
+# and under share/nnfck once installed.
+set(NNFCK_DATA_FILES ${CMAKE_CURRENT_SOURCE_DIR}/data/pmaa_names.json)
+add_custom_target(nnfck_data ALL
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NNFCK_DATA_FILES} $<TARGET_FILE_DIR:nnfck>
+  VERBATIM)
+install(TARGETS nnfck RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(FILES ${NNFCK_DATA_FILES} DESTINATION ${CMAKE_INSTALL_DATADIR}/nnfck)
+
 option(NNFCK_BUILD_TESTS "Build the nnfck test suite" ON)
 if(NNFCK_BUILD_TESTS)
   enable_testing()
   add_executable(nnfck_tests tests/tests.cpp)
   target_link_libraries(nnfck_tests PRIVATE nnfck_core)
+  add_custom_target(nnfck_tests_data ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different ${NNFCK_DATA_FILES} $<TARGET_FILE_DIR:nnfck_tests>
+    VERBATIM)
+  add_dependencies(nnfck_tests nnfck_tests_data)
   add_test(NAME nnfck_tests COMMAND nnfck_tests)
 endif()

@@ -47,6 +47,7 @@ struct Context {
 // The library that defines a format, printed as each format's first field.
 namespace library {
 inline constexpr std::string_view Sead = "Sead";
+inline constexpr std::string_view Agl = "Advanced Graphics Library";
 inline constexpr std::string_view NintendoWare = "NintendoWare";
 inline constexpr std::string_view NintendoSDK = "NintendoSDK";
 inline constexpr std::string_view XLink2 = "XLink2";

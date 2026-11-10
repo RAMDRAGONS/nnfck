@@ -8,7 +8,8 @@ Zstandard decoder, included as a git submodule.
 ## Supported formats
 
 Every format's first field names the library that defines it: Sead,
-NintendoWare, NintendoSDK, XLink2, EffectLink, SoundLink or Zstandard.
+Advanced Graphics Library, NintendoWare, NintendoSDK, XLink2, EffectLink,
+SoundLink or Zstandard.
 
 | Format | Notes |
 | --- | --- |
@@ -24,6 +25,7 @@ NintendoWare, NintendoSDK, XLink2, EffectLink, SoundLink or Zstandard.
 | Cafe Layout, Cafe Layout Animation, Cafe Complex Font | The XML sources of FLYT, FLAN and FCPX, listed like their binaries |
 | Cafe Model, Cafe Texture, Cafe Skeletal Animation and other nw4f_3dif sources | Resource type, tool and info attributes, named arrays; the Binary variants (`*b`) also list their streams |
 | Emitter Set (`.eset`) | Wii U and Switch EffectMaker sources: emitter tree, referenced textures and primitives |
+| Parameter Archive (PMAA) | Binary versions 1 (Wii U) and 2 (Switch) and the XML text form they are converted from. The extension names what the archive configures (Binary Agl Environment for `.baglenv`, Agl Environment for its `.aglenv` text, Binary Gsys Environment for `.bgenv` and so on); also the data version, node and parameter counts, parameter types, and the root's lists and objects by name. Text values are checked against their types. The signature is stored little-endian, so binary files begin with the bytes "AAMP". Environment archives such as `.genvb` and Mario Kart 8's `course.bgenv` are SARCs of these. |
 | Binary YAML (BYML) | Header, tables and root node |
 | Effect Binary (PTCL: EFTB, VFXB) | header, root nodes, emitter set and emitter counts |
 | Binary XLink Database (XLNK) | ELink2 or SLink2 system, resource version, 32- or 64-bit positions, users (named in version 21), table counts, parameter definitions |
@@ -47,6 +49,20 @@ ctest --preset release
 ```
 
 Presets: `release`, `debug`, and `asan` (AddressSanitizer and UBSan).
+
+`cmake --install` places the binary under `bin` and data files under
+`share/nnfck`. Builds copy the data files next to the executables so they run
+in place.
+
+## Data files
+
+Parameter archives store names only as CRC-32 hashes. `data/pmaa_names.json`
+lists the names that resolve them: `names` holds plain names, `indexed` and
+`underscore_indexed` hold bases that take a numeric suffix (`Fog0`,
+`blur_0`), from 0 up to `max_index`. Unknown hashes print in hex.
+
+nnfck looks for data files in `$NNFCK_DATA_DIR`, then beside the executable,
+then in `../share/nnfck` relative to it.
 
 ## Usage
 

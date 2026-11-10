@@ -731,6 +731,128 @@ void test_link_databases() {
   check(analyze(elink_file("Player", 0), Context{}).warnings.size() == 1, "EffectLink user hash mismatch is reported");
 }
 
+// A version 2 parameter archive: param_root holding the list Fog, whose
+// object Fog0 holds a bool and a string parameter.
+std::vector<u8> pmaa2_file(u32 string_offset_words = 3) {
+  std::vector<u8> v(0x70);
+  std::copy_n("AAMP", 4, v.begin());
+  put_u32(v, 0x4, 2);
+  put_u32(v, 0x8, 3);
+  put_u32(v, 0xC, 0x70);
+  put_u32(v, 0x14, 8);
+  put_u32(v, 0x18, 2);
+  put_u32(v, 0x1C, 1);
+  put_u32(v, 0x20, 2);
+  put_u32(v, 0x24, 4);
+  put_u32(v, 0x28, 4);
+  std::copy_n("aglenv", 6, v.begin() + 0x30);
+  put_u32(v, 0x38, crc32("param_root"));
+  put_u32(v, 0x3C, 1u << 16 | 3);
+  put_u32(v, 0x44, crc32("Fog"));
+  put_u32(v, 0x4C, 1u << 16 | 3);
+  put_u32(v, 0x50, crc32("Fog0"));
+  put_u32(v, 0x54, 2u << 16 | 2);
+  put_u32(v, 0x58, crc32("enable"));
+  put_u32(v, 0x5C, 4);
+  put_u32(v, 0x60, crc32("name"));
+  put_u32(v, 0x64, 7u << 24 | string_offset_words);
+  put_u32(v, 0x68, 1);
+  std::copy_n("fog", 3, v.begin() + 0x6C);
+  return v;
+}
+
+// A version 1 parameter archive: param_root holding the object
+// global_parameter with one single-byte bool.
+std::vector<u8> pmaa1_file(u32 param_size = 0xD) {
+  std::vector<u8> v(0x4D);
+  std::copy_n("AAMP", 4, v.begin());
+  put_u32(v, 0x4, 1);
+  put_u32(v, 0x8, 1);
+  put_u32(v, 0xC, 0x4D);
+  put_u32(v, 0x14, 8);
+  std::copy_n("gsdw", 4, v.begin() + 0x18);
+  put_u32(v, 0x20, 0x2D);
+  put_u32(v, 0x24, crc32("param_root"));
+  put_u32(v, 0x2C, 1);
+  put_u32(v, 0x30, 0x1D);
+  put_u32(v, 0x34, 1);
+  put_u32(v, 0x38, crc32("global_parameter"));
+  put_u32(v, 0x40, param_size);
+  put_u32(v, 0x48, crc32("enable"));
+  v[0x4C] = 1;
+  return v;
+}
+
+void test_parameter_archives() {
+  const Analysis v2 = analyze(pmaa2_file(), Context{});
+  check(v2.format == "Parameter Archive" && v2.errors.empty() && v2.warnings.empty(),
+        "well-formed version 2 parameter archive is clean");
+  check(field(v2, "Library") == "Advanced Graphics Library" && field(v2, "Extension") == "Binary Agl Environment (.baglenv)" && field(v2, "Parameter Types") == "1 bool, 1 string32",
+        "version 2 parameter archive header fields");
+  check(has_row(v2, "Fog: 0 lists, 1 object"), "parameter archive names resolve from the shipped list");
+
+  check(!analyze(pmaa2_file(0xFFFFFF), Context{}).errors.empty(),
+        "parameter value past the end of the archive is reported");
+  auto miscounted = pmaa2_file();
+  put_u32(miscounted, 0x20, 3);
+  check(!analyze(miscounted, Context{}).warnings.empty(), "parameter archive header count mismatch is reported");
+  auto future = pmaa2_file();
+  put_u32(future, 0x4, 3);
+  const Analysis unknown = analyze(future, Context{});
+  check(unknown.errors.empty() && unknown.warnings.size() == 1, "unknown parameter archive version shows its header");
+
+  const Analysis v1 = analyze(pmaa1_file(), Context{});
+  check(v1.errors.empty() && v1.warnings.empty() && field(v1, "Extension") == "Binary Gsys Shadow (.bgsdw)" &&
+            field(v1, "Parameters") == "1" && has_row(v1, "global_parameter: 1 parameter"),
+        "well-formed version 1 parameter archive is clean");
+  check(!analyze(pmaa1_file(0x40), Context{}).errors.empty(), "version 1 node past its parent is rejected");
+}
+
+std::vector<u8> text_bytes(std::string_view s) {
+  return std::vector<u8>(s.begin(), s.end());
+}
+
+void test_parameter_archive_text() {
+  const std::string curve = "\n9 7\n0.5 0.5 0.5\n0.5 1.0 1.0\n0.5 1.0 1.0\n";
+  const std::string doc = R"(<?xml version="1.0" encoding="utf-8"?>
+<root>
+	<header type="agllmap" version="2" date="time stamp : 2012/09/07 18:29:41"/>
+	<data>
+		<param_list name="param_root">
+			<param_list name="Fog">
+				<param_array name="Fog0">
+					<param name="enable" type="bool" value="true"/>
+					<param name="Direction" type="vec3" value="0 -1 0"/>
+					<param name="intensity0" type="curve1">)" + curve + R"(</param>
+				</param_array>
+			</param_list>
+			<param_array name="config">
+				<param name="type" type="string32" value="lightmap_array"/>
+			</param_array>
+		</param_list>
+	</data>
+</root>
+)";
+  const Analysis a = analyze(text_bytes(doc), Context{});
+  check(a.format == "Parameter Archive" && a.errors.empty() && a.warnings.empty(), "text parameter archive is clean");
+  check(field(a, "Library") == "Advanced Graphics Library" && field(a, "Extension") == "Agl Light Map (.agllmap)" &&
+            field(a, "Data Version") == "2" && field(a, "Saved") == "2012/09/07 18:29:41" &&
+            field(a, "Parameters") == "4" && field(a, "Parameter Types") == "1 bool, 1 vec3, 1 string32, 1 curve1",
+        "text parameter archive header fields");
+  check(has_row(a, "Fog: 0 lists, 1 object") && has_row(a, "config: 1 parameter"),
+        "text parameter archive lists the root's members");
+
+  std::string bad = doc;
+  bad.replace(bad.find("0 -1 0"), 6, "0 -1");
+  check(!analyze(text_bytes(bad), Context{}).errors.empty(), "text vec3 with two components is reported");
+  std::string unknown = doc;
+  unknown.replace(unknown.find("type=\"bool\""), 11, "type=\"bool2\"");
+  check(!analyze(text_bytes(unknown), Context{}).errors.empty(), "text parameter of unknown type is reported");
+  std::string short_curve = doc;
+  short_curve.replace(short_curve.find("9 7\n"), 4, "12 7\n");
+  check(!analyze(text_bytes(short_curve), Context{}).errors.empty(), "text curve missing points is reported");
+}
+
 void test_json() {
   const auto parse = [](std::string_view text) {
     return json::parse(Bytes(reinterpret_cast<const u8*>(text.data()), text.size()));
@@ -822,6 +944,8 @@ int main(int argc, char** argv) {
   test_layouts();
   test_layout_sources();
   test_intermediates();
+  test_parameter_archives();
+  test_parameter_archive_text();
   test_json();
 
   if (g_failures != 0) {
