@@ -1,5 +1,6 @@
 #include "core/crc32.hpp"
 #include "formats/listing.hpp"
+#include "formats/xlink/pooled.hpp"
 #include "formats/xlink/xlink.hpp"
 
 namespace nnfck::elink {
@@ -22,6 +23,30 @@ constexpr std::size_t EflkEffectSize = 0x68;
 constexpr std::size_t EflkCallTableSize = 0x14;
 constexpr std::size_t EflkActionTriggerSize = 0x3C;
 constexpr std::size_t EflkActionSize = 0xC;
+
+// Effects and action triggers move into pools shared by all users.
+constexpr u32 EflkPooledVersion = 10;
+constexpr pooled_link::Layout EflkPooledLayout = {
+    .name = Name,
+    .library = "EffectLink",
+    .asset = "effect",
+    .assets_title = "Effects",
+    .header = 0x14,
+    .users_field = 0x8,
+    .assets_field = 0xC,
+    .triggers_field = 0x10,
+    .asset_size = EflkEffectSize,
+    .trigger_size = EflkActionTriggerSize,
+    .user_header = 0x1C,
+    .call_tables_field = 0x14,
+    .actions_field = 0x16,
+    .user_assets_field = 0x10,
+    .user_triggers_field = 0x12,
+    .params_field = 0x18,
+    .call_table_size = EflkCallTableSize,
+    .action_size = EflkActionSize,
+    .trailer_offset = false,
+};
 
 // Header: file size, version, user count, record area, record count and
 // string table. Each user is keyed by the CRC-32 of its name and owns a run
@@ -99,13 +124,19 @@ void analyze_eflk(Bytes data, Analysis& out, const Context& ctx) {
   if (r.u32_at(0x4) > 0xFFFF)
     r.set_endian(Endian::Little);
   const u32 version = r.u32_at(0x4);
-  const u32 user_count = r.u32_at(0x8);
-  const u32 strings = r.u32_at(0xC);
 
   Section& s = out.section(std::string(Name));
   s.add("Magic", fmt_quoted(data.first(4)));
   s.add("Byte Order", std::string(endian_name(r.endian())));
   s.add("Version", std::to_string(version));
+  if (version == EflkPooledVersion) {
+    s.add("Platform", "3DS");
+    out.format += " (3DS)";
+    pooled_link::analyze(r, s, out, ctx, EflkPooledLayout);
+    return;
+  }
+  const u32 user_count = r.u32_at(0x8);
+  const u32 strings = r.u32_at(0xC);
   s.add("Users", std::to_string(user_count));
   s.add("String Table", fmt_hex(strings));
   if (version != EflkVersion) {

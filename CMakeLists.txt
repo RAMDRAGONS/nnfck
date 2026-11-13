@@ -76,6 +76,7 @@ add_library(nnfck_core STATIC
   src/formats/xlink/xlink.cpp
   src/formats/xlink/elink.cpp
   src/formats/xlink/slink.cpp
+  src/formats/xlink/pooled.cpp
   src/formats/pmaa/common.cpp
   src/formats/pmaa/pmaa.cpp
   src/formats/pmaa/text.cpp

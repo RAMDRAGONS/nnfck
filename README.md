@@ -29,8 +29,8 @@ SoundLink or Zstandard.
 | Binary YAML (BYML) | Header, tables and root node |
 | Effect Binary (PTCL: EFTB, VFXB) | header, root nodes, emitter set and emitter counts |
 | Binary XLink Database (XLNK) | ELink2 or SLink2 system, resource version, 32- or 64-bit positions, users (named in version 21), table counts, parameter definitions |
-| Binary EffectLink Database (BLNK, eflk) | Pre-XLink effect links: users with their records, or their call tables, effects and actions |
-| Binary SoundLink Database (SLNK) | Pre-XLink sound links: users with their call tables, assets, actions and action triggers |
+| Binary EffectLink Database (BLNK, eflk) | Pre-XLink effect links: users with their records, or their call tables, effects and actions; 3DS files share effect and action trigger pools and alias users |
+| Binary SoundLink Database (SLNK) | Pre-XLink sound links: users with their call tables, assets, actions and action triggers; 3DS files share asset and action trigger pools and alias users |
 
 The Yaz magic is printed as stored (`"Yaz0"`) and not used as the format's name:
 the trailing digit is left over from the N64, where it told cart data from disk

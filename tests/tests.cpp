@@ -694,6 +694,52 @@ std::vector<u8> eflk_file(u32 pool) {
   return v;
 }
 
+// A 3DS eflk EffectLink database: one shared effect, a user with one call
+// table picking shared effect `index`, and a user aliasing it.
+std::vector<u8> eflk_pooled_file(u32 index) {
+  const u32 offsets = 0x14 + 0x68, strings = offsets + 8, user = strings + 12, alias = user + 0x40;
+  std::vector<u8> v(alias + 0x10);
+  std::copy_n("eflk", 4, v.begin());
+  put_u32(v, 0x4, 10);
+  put_u32(v, 0x8, 2);
+  put_u32(v, 0xC, 1);
+  put_u32(v, offsets, user);
+  put_u32(v, offsets + 4, alias);
+  std::copy_n("Base\0Alias", 10, v.begin() + strings);
+  put_u32(v, user, 10);
+  put_u32(v, user + 0x8, 10);
+  put_u16(v, user + 0x10, 1);
+  put_u16(v, user + 0x14, 1);
+  put_u32(v, user + 0x30, index);
+  put_u32(v, user + 0x34, 0xFFFFFFFF);
+  put_u32(v, user + 0x38, 0xFFFFFFFF);
+  put_u32(v, alias, 2);
+  put_u32(v, alias + 0x4, 5);
+  return v;
+}
+
+// A 3DS SoundLink database: one shared asset and a user with one call table
+// picking it, its trailer offset at 0xC.
+std::vector<u8> slink_pooled_file(u32 trailer) {
+  const u32 offsets = 0x18 + 0x4C, strings = offsets + 4, user = strings + 8;
+  std::vector<u8> v(user + 0x3C);
+  std::copy_n("SLNK", 4, v.begin());
+  put_u32(v, 0x4, static_cast<u32>(v.size()));
+  put_u32(v, 0x8, 73);
+  put_u32(v, 0xC, 1);
+  put_u32(v, 0x10, 1);
+  put_u32(v, offsets, user);
+  std::copy_n("User", 4, v.begin() + strings);
+  put_u32(v, user, 1);
+  put_u32(v, user + 0x8, 5);
+  put_u32(v, user + 0xC, trailer);
+  put_u16(v, user + 0x10, 1);
+  put_u16(v, user + 0x14, 1);
+  put_u32(v, user + 0x30, 0xFFFFFFFF);
+  put_u32(v, user + 0x34, 0xFFFFFFFF);
+  return v;
+}
+
 void test_link_databases() {
   const Analysis eflk = analyze(eflk_file(0x1C + 0x68 + 0x14), Context{});
   check(eflk.format == "Binary EffectLink Database" && eflk.errors.empty() && eflk.warnings.empty(),
@@ -706,6 +752,19 @@ void test_link_databases() {
   check(!analyze(slink_file(0x10), Context{}).errors.empty(), "SoundLink user size mismatch is reported");
   check(field(eflk, "Library") == "EffectLink" && field(slink, "Library") == "SoundLink",
         "link databases name their libraries");
+
+  const Analysis eflk3ds = analyze(eflk_pooled_file(0), Context{});
+  check(eflk3ds.format == "Binary EffectLink Database (3DS)" && eflk3ds.errors.empty() && eflk3ds.warnings.empty() &&
+            field(eflk3ds, "Users") == "2 (1 alias)" && field(eflk3ds, "Effects") == "1" &&
+            has_row(eflk3ds, "Alias: alias of Base"),
+        "3DS eflk EffectLink database lists its users and aliases");
+  check(analyze(eflk_pooled_file(1), Context{}).errors.size() == 1, "3DS eflk shared effect out of range is reported");
+
+  const Analysis slink3ds = analyze(slink_pooled_file(0x38), Context{});
+  check(slink3ds.format == "Binary SoundLink Database (3DS)" && slink3ds.errors.empty() && slink3ds.warnings.empty() &&
+            field(slink3ds, "Assets") == "1",
+        "3DS SoundLink database is read");
+  check(analyze(slink_pooled_file(0x30), Context{}).errors.size() == 1, "3DS SoundLink trailer mismatch is reported");
 
   const Analysis effects = analyze(xlink_file("Eset"), Context{});
   check(effects.format == "Binary XLink Database (ELink2)" && effects.errors.empty() && effects.warnings.empty(),

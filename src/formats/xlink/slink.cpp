@@ -1,4 +1,5 @@
 #include "formats/listing.hpp"
+#include "formats/xlink/pooled.hpp"
 #include "formats/xlink/xlink.hpp"
 
 namespace nnfck::slink {
@@ -27,6 +28,30 @@ struct Layout {
 constexpr Layout Layouts[] = {
     {50, 0x3C, 0xC, 0xC, 0x44, 0x3C},
     {69, 0x30, 0x14, 0x14, 0x5C, 0x4C},
+};
+
+// Assets and action triggers move into pools shared by all users.
+constexpr u32 PooledVersion = 73;
+constexpr pooled_link::Layout PooledLayout = {
+    .name = Name,
+    .library = "SoundLink",
+    .asset = "asset",
+    .assets_title = "Assets",
+    .header = 0x18,
+    .users_field = 0xC,
+    .assets_field = 0x10,
+    .triggers_field = 0x14,
+    .asset_size = 0x4C,
+    .trigger_size = 0x40,
+    .user_header = 0x18,
+    .call_tables_field = 0x10,
+    .actions_field = 0x12,
+    .user_assets_field = 0x14,
+    .user_triggers_field = 0x16,
+    .params_field = 0,
+    .call_table_size = 0x14,
+    .action_size = 0x14,
+    .trailer_offset = true,
 };
 
 const Layout* layout_for(u32 version) {
@@ -60,12 +85,17 @@ void analyze(Bytes data, Analysis& out, const Context& ctx) {
   s.add("Byte Order", std::string(endian_name(r.endian())));
   s.add("Version", std::to_string(version));
   s.add("File Size", fmt_size(file_size));
-  s.add("Users", std::to_string(user_count));
-  s.add("String Table", fmt_hex(strings));
-
   if (file_size != data.size())
     out.warnings.push_back("SoundLink database declares " + fmt_hex(file_size) + " bytes but holds " +
                            fmt_hex(data.size()));
+  if (version == PooledVersion) {
+    s.add("Platform", "3DS");
+    out.format += " (3DS)";
+    pooled_link::analyze(r, s, out, ctx, PooledLayout);
+    return;
+  }
+  s.add("Users", std::to_string(user_count));
+  s.add("String Table", fmt_hex(strings));
   const Layout* l = layout_for(version);
   if (l == nullptr) {
     out.warnings.push_back("SoundLink version " + std::to_string(version) +

@@ -16,7 +16,8 @@ void analyze(Bytes data, Analysis& out, const Context& ctx);
 }  // namespace nnfck::xlink
 
 // EffectLink databases from before XLink: "BLNK", holding effect records per
-// user, and "eflk", holding call tables, effects and actions per user.
+// user, and "eflk", holding call tables, effects and actions per user. 3DS
+// eflk files draw effects and action triggers from shared pools.
 namespace nnfck::elink {
 
 inline constexpr std::string_view Name = "Binary EffectLink Database";
@@ -27,7 +28,8 @@ void analyze(Bytes data, Analysis& out, const Context& ctx);
 }  // namespace nnfck::elink
 
 // SoundLink databases ("SLNK") from before XLink: per user, call tables that
-// play sound assets and actions with their triggers.
+// play sound assets and actions with their triggers. 3DS files draw assets
+// and action triggers from shared pools.
 namespace nnfck::slink {
 
 inline constexpr std::string_view Name = "Binary SoundLink Database";
