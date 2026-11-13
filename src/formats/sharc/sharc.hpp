@@ -18,9 +18,9 @@ bool probe(Bytes data);
 void analyze(Bytes data, Analysis& out, const Context& ctx);
 
 // agl::ResBinaryShaderArchive (signature SHAB): compiled shaders and the
-// programs that use them, .sharcfb on Wii U and .sharcb on Switch and Switch
-// 2, where the header grows to hold the NVN objects for the shader memory
-// pool.
+// programs that use them, .sharcfb on Wii U (versions 8 and 9) and .sharcb on
+// Switch and Switch 2, where the header grows to hold the NVN objects for the
+// shader memory pool.
 inline constexpr std::string_view BinaryName = "Binary Shader Archive";
 
 bool probe_binary(Bytes data);

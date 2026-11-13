@@ -205,7 +205,6 @@ constexpr std::size_t BinaryHeaderSize = 0x18;
 constexpr std::size_t NvnHeaderSize = 0x150;
 constexpr std::size_t ShaderBinaryHeaderSize = 0x10;
 constexpr std::size_t BinaryProgramHeaderSize = 0x10;
-constexpr u32 WiiUVersion = 8;
 
 // The string area, holding the archive name, follows the header; the shader
 // binary array follows it.
@@ -256,7 +255,6 @@ void analyze_binary(Bytes data, Analysis& out, const Context& ctx) {
   out.format = std::string(BinaryName);
   const ByteReader r = reader_for(data, "binary shader archive header");
   r.require(0, BinaryHeaderSize, "binary shader archive header");
-  const u32 version = r.u32_at(0x4);
 
   // Only the NVN header leaves the space after a compact header's string
   // area empty.
@@ -269,8 +267,10 @@ void analyze_binary(Bytes data, Analysis& out, const Context& ctx) {
     for (const ControlVersion& c : ControlVersions)
       if (c.version == *control)
         platform = c.platform;
-  } else if (version == WiiUVersion)
+  } else if (!nvn) {
+    // Only Wii U builds the compact header; its binaries hold GX2 shaders.
     platform = "Wii U";
+  }
   if (platform)
     out.format += " (" + std::string(*platform) + ")";
 

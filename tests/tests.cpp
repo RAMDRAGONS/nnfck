@@ -815,6 +815,9 @@ void test_shader_archives() {
   check(analyze(sharcb_file(true, 0, 7), Context{}).format == "Binary Shader Archive",
         "unknown NVN control version names no platform");
   check(!analyze(sharcb_file(false, 0x1000), Context{}).errors.empty(), "oversized shader program array is reported");
+  std::vector<u8> v9 = sharcb_file(false);
+  put_u32(v9, 0x4, 9);
+  check(analyze(v9, Context{}).format == "Binary Shader Archive (Wii U)", "version 9 compact archive is Wii U");
 }
 
 // A 3DS SPBD effect binary: one emitter set holding one complex emitter.
