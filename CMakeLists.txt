@@ -82,6 +82,7 @@ add_library(nnfck_core STATIC
   src/formats/pmaa/common.cpp
   src/formats/pmaa/pmaa.cpp
   src/formats/pmaa/text.cpp
+  src/formats/sharc/sharc.cpp
   src/formats/pmaa/names.cpp
 )
 target_include_directories(nnfck_core PUBLIC src)

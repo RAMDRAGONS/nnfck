@@ -10,6 +10,7 @@
 #include "formats/fres/intermediate.hpp"
 #include "formats/layout/layout.hpp"
 #include "formats/pmaa/pmaa.hpp"
+#include "formats/sharc/sharc.hpp"
 #include "formats/sarc/sarc.hpp"
 #include "formats/xlink/xlink.hpp"
 #include "formats/yaz/yaz.hpp"
@@ -22,12 +23,14 @@ namespace {
 // Probes with longer or more specific signatures come first. FLIM's signature
 // sits at an offset the file's last bytes give, and BYML's two-byte magic is
 // the weakest check, so they run last.
-constexpr std::array<FormatHandler, 21> Handlers = {{
+constexpr std::array<FormatHandler, 23> Handlers = {{
     {yaz::Name, library::Sead, yaz::probe, yaz::analyze},
     {zstd::Name, library::Zstandard, zstd::probe, zstd::analyze},
     {sarc::Name, library::Sead, sarc::probe, sarc::analyze},
     {fres::Name, library::NintendoWare, fres::probe, fres::analyze},
     {pmaa::Name, library::Agl, pmaa::probe, pmaa::analyze},
+    {sharc::Name, library::Agl, sharc::probe, sharc::analyze},
+    {sharc::BinaryName, library::Agl, sharc::probe_binary, sharc::analyze_binary},
     {bntx::Name, library::NintendoSDK, bntx::probe, bntx::analyze},
     {flyt::Name, library::NintendoWare, flyt::probe, flyt::analyze},
     {flan::Name, library::NintendoWare, flan::probe, flan::analyze},

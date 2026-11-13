@@ -706,6 +706,117 @@ std::vector<u8> eflk_file(u32 pool) {
   return v;
 }
 
+void put_bytes(std::vector<u8>& v, std::string_view s) {
+  v.insert(v.end(), s.begin(), s.end());
+}
+
+void put_array(std::vector<u8>& v, u32 count, std::size_t at) {
+  put_u32(v, at, static_cast<u32>(v.size() - at));
+  put_u32(v, at + 4, count);
+}
+
+// A version 12 shader archive: one program built for the vertex and fragment
+// stages from source `source`, and one source file.
+std::vector<u8> sharc_file(u32 version, u16 source) {
+  std::vector<u8> v(0x14);
+  std::copy_n("AAHS", 4, v.begin());
+  put_u32(v, 0x4, version);
+  put_u32(v, 0xC, 1);
+  put_u32(v, 0x10, 2);
+  put_bytes(v, std::string_view("A\0", 2));
+  const std::size_t programs = v.size();
+  v.resize(programs + 8 + 0x14);
+  const std::size_t program = programs + 8;
+  put_u32(v, program + 0x4, 2);
+  put_u32(v, program + 0x8, 0xFFFF0000u | source);
+  put_u32(v, program + 0xC, 0xFFFF0000u | source);
+  put_u32(v, program + 0x10, 0xFFFFFFFF);
+  put_bytes(v, std::string_view("P\0", 2));
+  for (int k = 0; k < 4; ++k) {
+    const std::size_t at = v.size();
+    v.resize(at + 8);
+    put_array(v, 0, at);
+  }
+  put_u32(v, program, static_cast<u32>(v.size() - program));
+  put_array(v, 1, programs);
+  const std::size_t sources = v.size();
+  v.resize(sources + 8 + 0x10);
+  const std::size_t entry = sources + 8;
+  put_u32(v, entry + 0x4, 2);
+  put_u32(v, entry + 0x8, 4);
+  put_u32(v, entry + 0xC, 4);
+  put_bytes(v, std::string_view("S\0text", 6));
+  put_u32(v, entry, static_cast<u32>(v.size() - entry));
+  put_array(v, 1, sources);
+  put_u32(v, 0x8, static_cast<u32>(v.size()));
+  return v;
+}
+
+// A binary shader archive with a vertex and a fragment binary and one
+// program, behind the compact header or the 0x150-byte NVN one. NVN files
+// give the vertex binary a control section with version `control`.
+std::vector<u8> sharcb_file(bool nvn, u32 program_array_size = 0, u32 control = 1) {
+  const std::size_t header = nvn ? 0x150 : 0x18;
+  std::vector<u8> v(header);
+  std::copy_n("BAHS", 4, v.begin());
+  put_u32(v, 0x4, nvn ? 9 : 8);
+  put_u32(v, 0xC, 1);
+  put_u32(v, 0x14, 2);
+  put_bytes(v, std::string_view("N\0", 2));
+  const std::size_t binaries = v.size();
+  const u32 first = nvn ? 0x28 : 0x10;
+  v.resize(binaries + 8 + first + 0x10);
+  put_u32(v, binaries + 8, first);
+  put_u32(v, binaries + 8 + first, 0x10);
+  put_u32(v, binaries + 8 + first + 4, 1);
+  if (nvn) {
+    const std::size_t data = binaries + 8 + 0x10;
+    put_u32(v, data + 0xC, 0x10);
+    put_u32(v, data + 0x10, 0x98761234);
+    put_u32(v, data + 0x14, control);
+  }
+  put_array(v, 2, binaries);
+  const std::size_t programs = v.size();
+  v.resize(programs + 8 + 0x10);
+  put_u32(v, programs + 8 + 0x4, 2);
+  put_bytes(v, std::string_view("P\0", 2));
+  put_u32(v, programs + 8, 0x12);
+  put_array(v, 1, programs);
+  if (program_array_size != 0)
+    put_u32(v, programs, program_array_size);
+  put_u32(v, 0x8, static_cast<u32>(v.size()));
+  if (nvn)
+    put_u32(v, 0x1C, static_cast<u32>(v.size()));
+  return v;
+}
+
+void test_shader_archives() {
+  const Analysis a = analyze(sharc_file(12, 0), Context{});
+  check(a.format == "Shader Archive" && a.errors.empty() && a.warnings.empty() && field(a, "Library") == "Agl" &&
+            field(a, "Name") == "A" && has_row(a, "P: vertex S, fragment S") && has_row(a, "S: 0x4 (4 bytes)"),
+        "shader archive lists its programs and sources");
+  check(analyze(sharc_file(12, 1), Context{}).errors.size() == 2, "shader program sources out of range are reported");
+  const Analysis unknown = analyze(sharc_file(11, 0), Context{});
+  check(unknown.warnings.size() == 1 && field(unknown, "Programs") == "1",
+        "unknown shader archive version is counted, not listed");
+
+  const Analysis wiiu = analyze(sharcb_file(false), Context{});
+  check(wiiu.format == "Binary Shader Archive (Wii U)" && wiiu.errors.empty() && wiiu.warnings.empty() &&
+            field(wiiu, "Shader Binaries") == "2 (1 vertex, 1 fragment)" && field(wiiu, "Extension") == ".sharcfb" &&
+            has_row(wiiu, "P"),
+        "Wii U binary shader archive is read");
+  const Analysis nx = analyze(sharcb_file(true), Context{});
+  check(nx.format == "Binary Shader Archive (Switch)" && nx.errors.empty() && nx.warnings.empty() &&
+            field(nx, "Extension") == ".sharcb" && field(nx, "Name") == "N" &&
+            field(nx, "Shader Binaries") == "2 (1 vertex, 1 fragment)",
+        "Switch binary shader archive is read past its NVN header");
+  check(analyze(sharcb_file(true, 0, 0xC9), Context{}).format == "Binary Shader Archive (Switch 2)",
+        "Switch 2 binary shader archive is told apart by its control section");
+  check(analyze(sharcb_file(true, 0, 7), Context{}).format == "Binary Shader Archive",
+        "unknown NVN control version names no platform");
+  check(!analyze(sharcb_file(false, 0x1000), Context{}).errors.empty(), "oversized shader program array is reported");
+}
+
 // A 3DS SPBD effect binary: one emitter set holding one complex emitter.
 // Version 51 adds shader and primitive tables, each a bare entry count.
 std::vector<u8> spbd_file(u32 version, u32 emitter_table) {
@@ -1053,6 +1164,7 @@ int main(int argc, char** argv) {
   test_zstd();
   test_link_databases();
   test_spbd();
+  test_shader_archives();
   test_layouts();
   test_layout_sources();
   test_intermediates();
