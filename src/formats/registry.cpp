@@ -11,6 +11,7 @@
 #include "formats/fsha/fsha.hpp"
 #include "formats/fres/intermediate.hpp"
 #include "formats/layout/layout.hpp"
+#include "formats/nvn_shader/nvn_shader.hpp"
 #include "formats/pmaa/pmaa.hpp"
 #include "formats/sharc/sharc.hpp"
 #include "formats/xtx/xtx.hpp"
@@ -26,7 +27,7 @@ namespace {
 // Probes with longer or more specific signatures come first. FLIM's signature
 // sits at an offset the file's last bytes give, and BYML's two-byte magic is
 // the weakest check, so they run last.
-constexpr std::array<FormatHandler, 26> Handlers = {{
+constexpr std::array<FormatHandler, 27> Handlers = {{
     {yaz::Name, library::Sead, yaz::probe, yaz::analyze},
     {zstd::Name, library::Zstandard, zstd::probe, zstd::analyze},
     {sarc::Name, library::Sead, sarc::probe, sarc::analyze},
@@ -52,6 +53,7 @@ constexpr std::array<FormatHandler, 26> Handlers = {{
     {pmaa::Name, library::Agl, pmaa::probe_text, pmaa::analyze_text},
     {fres::intermediate::Name, library::NintendoWare, fres::intermediate::probe, fres::intermediate::analyze},
     {eset::Name, library::NintendoWare, eset::probe, eset::analyze},
+    {nvn_shader::Name, library::NintendoSDK, nvn_shader::probe, nvn_shader::analyze},
     {byml::Name, library::Sead, byml::probe, byml::analyze},
 }};
 

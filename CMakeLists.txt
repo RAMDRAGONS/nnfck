@@ -87,6 +87,7 @@ add_library(nnfck_core STATIC
   src/formats/bnsh/bnsh.cpp
   src/formats/fsha/fsha.cpp
   src/formats/xtx/xtx.cpp
+  src/formats/nvn_shader/nvn_shader.cpp
   src/formats/pmaa/names.cpp
 )
 target_include_directories(nnfck_core PUBLIC src)

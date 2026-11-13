@@ -965,6 +965,36 @@ void test_xtx() {
   check(!analyze(bad, Context{}).errors.empty(), "oversized NVN texture archive block is reported");
 }
 
+// A bare NVN shader with a vertex and a fragment stage: control sections
+// with NVN control version `control`, then code whose program headers give
+// the stages.
+std::vector<u8> nvn_shader_file(u32 control) {
+  std::vector<u8> v(0x100);
+  const u32 offsets[] = {0x10, 0x40, 0x80, 0xC0};
+  for (std::size_t i = 0; i < 4; ++i)
+    put_u32(v, i * 4, offsets[i]);
+  for (const u32 c : {offsets[0], offsets[1]}) {
+    put_u32(v, c, 0x98761234);
+    put_u32(v, c + 4, control);
+  }
+  put_u32(v, offsets[2], 0x12345678);
+  put_u32(v, offsets[2] + 0x30, 1 | 3u << 5 | 1u << 10);
+  put_u32(v, offsets[3], 0x12345678);
+  put_u32(v, offsets[3] + 0x30, 2 | 3u << 5 | 5u << 10);
+  return v;
+}
+
+void test_nvn_shader() {
+  const Analysis a = analyze(nvn_shader_file(1), Context{});
+  check(a.format == "NVN Shader (Switch)" && a.errors.empty() && a.warnings.empty() && field(a, "Stages") == "2" &&
+            field(a, "Library") == "NintendoSDK" &&
+            field(a, "vertex") == "control 0x30 bytes at 0x10, code 0x40 bytes at 0x80" &&
+            field(a, "fragment") == "control 0x40 bytes at 0x40, code 0x40 bytes at 0xC0",
+        "bare NVN shader lists its stages");
+  check(analyze(nvn_shader_file(0xC9), Context{}).format == "NVN Shader (Switch 2)",
+        "Switch 2 bare NVN shader is told apart by its control version");
+}
+
 void test_shader_files() {
   const Analysis b = analyze(bnsh_file(1), Context{});
   check(b.format == "Binary Nintendo Shader (Switch)" && b.errors.empty() && b.warnings.empty() &&
@@ -1342,6 +1372,7 @@ int main(int argc, char** argv) {
   test_shader_archives();
   test_shader_files();
   test_xtx();
+  test_nvn_shader();
   test_layouts();
   test_layout_sources();
   test_intermediates();
