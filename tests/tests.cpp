@@ -12,6 +12,7 @@
 #include "core/crc32.hpp"
 #include "core/file.hpp"
 #include "core/json.hpp"
+#include "core/shift_jis.hpp"
 #include "formats/format.hpp"
 #include "formats/yaz/yaz.hpp"
 
@@ -238,6 +239,15 @@ void test_budget() {
   const auto yaz = yaz_file(0x100, {0x80, 'a', 0x00, 0x00, 0xFF});
   const Analysis b = analyze(yaz, Context{0, &tiny});
   check(!b.errors.empty(), "decompression beyond the budget is refused");
+}
+
+void test_shift_jis() {
+  check(shift_jis_to_utf8("SE\x82\xc8\x82\xb5") == "SE\u306a\u3057", "Shift-JIS kana decode");
+  check(shift_jis_to_utf8("\x88\xf8\x82\xab\x8c\xcb") == "\u5f15\u304d\u6238", "Shift-JIS kanji decode");
+  check(shift_jis_to_utf8("\xb1") == "\uff71", "Shift-JIS halfwidth katakana decode");
+  check(shift_jis_to_utf8("\x87\x40") == "\u2460", "CP932 NEC extensions decode");
+  check(shift_jis_to_utf8("\x82") == "\x82" && shift_jis_to_utf8("\xf0\x40") == "\xf0\x40",
+        "undefined Shift-JIS bytes pass through");
 }
 
 void test_ptcl_overlapping_siblings() {
@@ -696,10 +706,49 @@ std::vector<u8> eflk_file(u32 pool) {
   return v;
 }
 
+// A 3DS SPBD effect binary: one emitter set holding one complex emitter.
+// Version 51 adds shader and primitive tables, each a bare entry count.
+std::vector<u8> spbd_file(u32 version, u32 emitter_table) {
+  const bool v51 = version == 51;
+  const u32 header = v51 ? 0x48 : 0x1C, table = header + 0x1C, emitter = table + 8, names = emitter + 0x40;
+  std::vector<u8> v(names + 16);
+  std::copy_n("SPBD", 4, v.begin());
+  put_u32(v, 0x4, version);
+  put_u32(v, 0x8, 1);
+  put_u32(v, 0x10, names);
+  put_u32(v, 0x14, names);
+  if (v51) {
+    put_u32(v, 0x1C, emitter + 0x3C);
+    put_u32(v, 0x2C, emitter + 0x3C);
+  }
+  put_u32(v, header + 0x8, 5);
+  put_u32(v, header + 0x10, 1);
+  put_u32(v, header + 0x14, emitter_table);
+  put_u32(v, table, emitter);
+  put_u32(v, emitter, 1);
+  put_u32(v, emitter + (v51 ? 0x38 : 0xC), 9);
+  std::copy_n("Demo\0Set\0Main", 14, v.begin() + names);
+  return v;
+}
+
+void test_spbd() {
+  for (const u32 version : {11u, 51u}) {
+    const Analysis a = analyze(spbd_file(version, 0x1C + (version == 51 ? 0x48 : 0x1C)), Context{});
+    check(a.format == "Effect Binary (PTCL, 3DS)" && a.errors.empty() && a.warnings.empty() &&
+              field(a, "Name") == "Demo" && field(a, "Emitters") == "1 (1 complex)" && has_row(a, "Set: Main") &&
+              field(a, "Library") == (version == 11 ? "Sead" : "NintendoWare"),
+          "3DS SPBD effect binary version " + std::to_string(version) + " lists its emitter sets and library");
+  }
+  check(field(analyze(spbd_file(51, 0x64), Context{}), "Shaders") == "0", "SPBD version 51 counts shaders");
+  check(!analyze(spbd_file(51, 0x10000), Context{}).errors.empty(), "SPBD emitter table out of range is reported");
+  check(analyze(spbd_file(12, 0), Context{}).warnings.size() == 1, "unknown SPBD version is reported");
+}
+
 // A 3DS eflk EffectLink database: one shared effect, a user with one call
-// table picking shared effect `index`, and a user aliasing it.
+// table picking shared effect `index`, and a user aliasing it. The first
+// user's name is Shift-JIS.
 std::vector<u8> eflk_pooled_file(u32 index) {
-  const u32 offsets = 0x14 + 0x68, strings = offsets + 8, user = strings + 12, alias = user + 0x40;
+  const u32 offsets = 0x14 + 0x68, strings = offsets + 8, user = strings + 16, alias = user + 0x40;
   std::vector<u8> v(alias + 0x10);
   std::copy_n("eflk", 4, v.begin());
   put_u32(v, 0x4, 10);
@@ -707,16 +756,16 @@ std::vector<u8> eflk_pooled_file(u32 index) {
   put_u32(v, 0xC, 1);
   put_u32(v, offsets, user);
   put_u32(v, offsets + 4, alias);
-  std::copy_n("Base\0Alias", 10, v.begin() + strings);
+  std::copy_n("\x82\xcc\x82\xea\x82\xf1\0Alias", 12, v.begin() + strings);
   put_u32(v, user, 10);
-  put_u32(v, user + 0x8, 10);
+  put_u32(v, user + 0x8, 12);
   put_u16(v, user + 0x10, 1);
   put_u16(v, user + 0x14, 1);
   put_u32(v, user + 0x30, index);
   put_u32(v, user + 0x34, 0xFFFFFFFF);
   put_u32(v, user + 0x38, 0xFFFFFFFF);
   put_u32(v, alias, 2);
-  put_u32(v, alias + 0x4, 5);
+  put_u32(v, alias + 0x4, 7);
   return v;
 }
 
@@ -758,7 +807,7 @@ void test_link_databases() {
   const Analysis eflk3ds = analyze(eflk_pooled_file(0), Context{});
   check(eflk3ds.format == "Binary EffectLink Database (3DS)" && eflk3ds.errors.empty() && eflk3ds.warnings.empty() &&
             field(eflk3ds, "Users") == "2 (1 alias)" && field(eflk3ds, "Effects") == "1" &&
-            has_row(eflk3ds, "Alias: alias of Base"),
+            has_row(eflk3ds, "Alias: alias of \u306e\u308c\u3093"),
         "3DS eflk EffectLink database lists its users and aliases");
   check(analyze(eflk_pooled_file(1), Context{}).errors.size() == 1, "3DS eflk shared effect out of range is reported");
 
@@ -999,9 +1048,11 @@ int main(int argc, char** argv) {
   test_sarc_rejects_overlapping_data();
   test_members_listed_one_layer_deep();
   test_budget();
+  test_shift_jis();
   test_ptcl_overlapping_siblings();
   test_zstd();
   test_link_databases();
+  test_spbd();
   test_layouts();
   test_layout_sources();
   test_intermediates();

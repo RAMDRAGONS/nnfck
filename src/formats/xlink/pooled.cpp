@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 
+#include "core/shift_jis.hpp"
 #include "formats/listing.hpp"
 
 namespace nnfck::pooled_link {
@@ -51,8 +52,11 @@ void analyze(const ByteReader& r, Section& s, Analysis& out, const Context& ctx,
     const u32 kind = r.u32_at(at);
     if (kind == EmptyUser)
       continue;
-    User u{r.cstring_at(static_cast<std::size_t>(strings) + r.u32_at(at + 0x4), MaxNameLength),
-           r.cstring_at(static_cast<std::size_t>(strings) + r.u32_at(at + 0x8), MaxNameLength), kind == AliasUser};
+    // Names come from Japanese Windows tools.
+    const auto name_at = [&](std::size_t field) {
+      return shift_jis_to_utf8(r.cstring_at(static_cast<std::size_t>(strings) + r.u32_at(at + field), MaxNameLength));
+    };
+    User u{name_at(0x4), name_at(0x8), kind == AliasUser};
     ctx.spend(AliasUserSize + u.name.size() + u.base.size(), "user names");
     if (u.alias) {
       if (ctx.list_members)

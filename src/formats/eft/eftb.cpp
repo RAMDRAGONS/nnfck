@@ -196,11 +196,14 @@ void analyze_vfxb(Bytes data, Analysis& out) {
 
 bool probe(Bytes data) {
   const ByteReader r(data, Endian::Big);
-  return r.magic_at(0, "EFTB") || r.magic_at(0, "VFXB");
+  return r.magic_at(0, "EFTB") || r.magic_at(0, "VFXB") || r.magic_at(0, "SPBD");
 }
 
-void analyze(Bytes data, Analysis& out, const Context&) {
-  if (ByteReader(data, Endian::Big).magic_at(0, "VFXB"))
+void analyze(Bytes data, Analysis& out, const Context& ctx) {
+  const ByteReader r(data, Endian::Big);
+  if (r.magic_at(0, "SPBD"))
+    analyze_spbd(data, out, ctx);
+  else if (r.magic_at(0, "VFXB"))
     analyze_vfxb(data, out);
   else
     analyze_eftb(data, out);

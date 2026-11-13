@@ -26,7 +26,7 @@ NintendoWare, NintendoSDK, XLink2, EffectLink, SoundLink or Zstandard.
 | Emitter Set (`.eset`) | Wii U and Switch EffectMaker sources: emitter tree, referenced textures and primitives |
 | Parameter Archive (PMAA) | Binary versions 1 (Wii U) and 2 (Switch) and the XML text form they are converted from. The extension names what the archive configures (Binary Agl Environment for `.baglenv`, Agl Environment for its `.aglenv` text, Binary Gsys Environment for `.bgenv` and so on); also the data version, node and parameter counts, parameter types, and the root's lists and objects by name. Text values are checked against their types. The signature is stored little-endian, so binary files begin with the bytes "AAMP". Environment archives such as `.genvb` and Mario Kart 8's `course.bgenv` are SARCs of these. |
 | Binary YAML (BYML) | Header, tables and root node |
-| Effect Binary (PTCL: EFTB, VFXB) | header, root nodes, emitter set and emitter counts |
+| Effect Binary (PTCL: SPBD, EFTB, VFXB) | header, root nodes, emitter set and emitter counts; 3DS files list each emitter set's emitters |
 | Binary XLink Database (XLNK) | ELink2 or SLink2 system, resource version, 32- or 64-bit positions, users (named in version 21), table counts, parameter definitions |
 | Binary EffectLink Database (BLNK, eflk) | Pre-XLink effect links: users with their records, or their call tables, effects and actions; 3DS files share effect and action trigger pools and alias users |
 | Binary SoundLink Database (SLNK) | Pre-XLink sound links: users with their call tables, assets, actions and action triggers; 3DS files share asset and action trigger pools and alias users |

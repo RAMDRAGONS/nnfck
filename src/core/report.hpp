@@ -43,6 +43,9 @@ private:
 // container formats build by prefixing their own name to their payload's.
 struct Analysis {
   std::string format;
+  // Set where a format moved between libraries over its versions, naming
+  // the one that produced this file instead of the format's usual library.
+  std::string library;
   std::vector<Section> sections;
   std::vector<std::string> warnings;
   std::vector<std::string> errors;

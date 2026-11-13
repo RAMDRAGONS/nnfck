@@ -42,6 +42,7 @@ add_library(nnfck_core STATIC
   src/core/file.cpp
   src/core/json.cpp
   src/core/report.cpp
+  src/core/shift_jis.cpp
   src/core/xml.cpp
   src/formats/registry.cpp
   src/formats/listing.cpp
@@ -68,6 +69,7 @@ add_library(nnfck_core STATIC
   src/formats/byml/byml.cpp
   src/formats/eft/eftb.cpp
   src/formats/eft/eset.cpp
+  src/formats/eft/spbd.cpp
   src/formats/layout/common.cpp
   src/formats/layout/flyt.cpp
   src/formats/layout/flan.cpp

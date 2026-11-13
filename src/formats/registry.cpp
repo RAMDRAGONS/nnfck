@@ -79,7 +79,7 @@ Analysis analyze(Bytes data, const Context& ctx) {
       out.errors.push_back(std::string(h->name) + ": " + e.what());
     }
     if (!out.sections.empty())
-      out.sections.front().prepend("Library", std::string(h->library));
+      out.sections.front().prepend("Library", out.library.empty() ? std::string(h->library) : out.library);
     return out;
   }
 
