@@ -7,9 +7,8 @@ Zstandard decoder, included as a git submodule.
 
 ## Supported formats
 
-Every format's first field names the library that defines it: Sead,
-Advanced Graphics Library, NintendoWare, NintendoSDK, XLink2, EffectLink,
-SoundLink or Zstandard.
+Every format's first field names the library that defines it: Sead, Agl,
+NintendoWare, NintendoSDK, XLink2, EffectLink, SoundLink or Zstandard.
 
 | Format | Notes |
 | --- | --- |

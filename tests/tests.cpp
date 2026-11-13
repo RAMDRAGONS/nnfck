@@ -252,6 +252,8 @@ void test_ptcl_overlapping_siblings() {
   put_u32(v, 0x4C, 1);
   const Analysis a = analyze(v, Context{});
   check(!a.errors.empty(), "overlapping effect node siblings are rejected");
+  check(!a.sections.empty() && a.sections.front().fields().front().value == "NintendoWare",
+        "effect binaries name the NintendoWare library");
 }
 
 // One Zstandard frame holding `payload` as a single raw block. Without a
@@ -846,7 +848,7 @@ void test_parameter_archives() {
   const Analysis v2 = analyze(pmaa2_file(), Context{});
   check(v2.format == "Parameter Archive" && v2.errors.empty() && v2.warnings.empty(),
         "well-formed version 2 parameter archive is clean");
-  check(field(v2, "Library") == "Advanced Graphics Library" && field(v2, "Extension") == "Binary Agl Environment (.baglenv)" && field(v2, "Parameter Types") == "1 bool, 1 string32",
+  check(field(v2, "Library") == "Agl" && field(v2, "Extension") == "Binary Agl Environment (.baglenv)" && field(v2, "Parameter Types") == "1 bool, 1 string32",
         "version 2 parameter archive header fields");
   check(has_row(v2, "Fog: 0 lists, 1 object"), "parameter archive names resolve from the shipped list");
 
@@ -894,7 +896,7 @@ void test_parameter_archive_text() {
 )";
   const Analysis a = analyze(text_bytes(doc), Context{});
   check(a.format == "Parameter Archive" && a.errors.empty() && a.warnings.empty(), "text parameter archive is clean");
-  check(field(a, "Library") == "Advanced Graphics Library" && field(a, "Extension") == "Agl Light Map (.agllmap)" &&
+  check(field(a, "Library") == "Agl" && field(a, "Extension") == "Agl Light Map (.agllmap)" &&
             field(a, "Data Version") == "2" && field(a, "Saved") == "2012/09/07 18:29:41" &&
             field(a, "Parameters") == "4" && field(a, "Parameter Types") == "1 bool, 1 vec3, 1 string32, 1 curve1",
         "text parameter archive header fields");
