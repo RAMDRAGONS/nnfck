@@ -923,6 +923,48 @@ std::vector<u8> bfsha_cafe_file(u8 minor) {
   return v;
 }
 
+// An NVN texture archive with one 4x4 R8 texture: texture info, image data
+// and, unless `end` is false, the closing block.
+std::vector<u8> xtx_file(bool end) {
+  std::vector<u8> v(0x10);
+  std::copy_n("DFvN", 4, v.begin());
+  put_u32(v, 0x4, 0x10);
+  put_u32(v, 0x8, 1);
+  const auto block = [&](s32 type, std::size_t size) {
+    const std::size_t at = v.size();
+    v.resize(at + 0x24 + size);
+    std::copy_n("HBvN", 4, v.begin() + static_cast<std::ptrdiff_t>(at));
+    put_u32(v, at + 0x4, 0x24);
+    put_u64(v, at + 0x8, size);
+    put_u64(v, at + 0x10, 0x24);
+    put_u32(v, at + 0x18, static_cast<u32>(type));
+    return at + 0x24;
+  };
+  const std::size_t info = block(2, 0x70);
+  put_u64(v, info, 0x10);
+  put_u32(v, info + 0xC, 4);
+  put_u32(v, info + 0x10, 4);
+  put_u32(v, info + 0x14, 1);
+  put_u32(v, info + 0x18, 1);
+  put_u32(v, info + 0x1C, 1);
+  put_u32(v, info + 0x20, 1);
+  block(3, 0x10);
+  if (end)
+    block(5, 0x18);
+  return v;
+}
+
+void test_xtx() {
+  const Analysis a = analyze(xtx_file(true), Context{});
+  check(a.format == "NVN Texture" && a.errors.empty() && a.warnings.empty() &&
+            field(a, "Library") == "NintendoSDK" && has_row(a, "0: 4x4, R8, 2D, 1 mip, 0x10 bytes"),
+        "NVN texture archive lists its textures");
+  check(analyze(xtx_file(false), Context{}).warnings.size() == 1, "NVN texture archive without an end block is reported");
+  std::vector<u8> bad = xtx_file(true);
+  put_u64(bad, 0x10 + 0x8, 0x100000);
+  check(!analyze(bad, Context{}).errors.empty(), "oversized NVN texture archive block is reported");
+}
+
 void test_shader_files() {
   const Analysis b = analyze(bnsh_file(1), Context{});
   check(b.format == "Binary Nintendo Shader (Switch)" && b.errors.empty() && b.warnings.empty() &&
@@ -1299,6 +1341,7 @@ int main(int argc, char** argv) {
   test_spbd();
   test_shader_archives();
   test_shader_files();
+  test_xtx();
   test_layouts();
   test_layout_sources();
   test_intermediates();

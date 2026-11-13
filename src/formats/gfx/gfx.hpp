@@ -19,6 +19,9 @@ std::string tile_mode_name(u32 mode);
 std::string channel_mapping_name(Bytes mapping);
 
 std::string low_level_api_name(u32 api);
+// NVN's own texture enumerations, as stored by its texture packager.
+std::string nvn_format_name(u32 format);
+std::string nvn_texture_target_name(u32 target);
 std::string shader_code_type_name(u32 type);
 
 // NVN shader control sections open with this magic and a version that tells
