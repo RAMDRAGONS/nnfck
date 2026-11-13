@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 
+#include "formats/byte_order.hpp"
 #include "formats/fres/fres.hpp"
 #include "formats/listing.hpp"
 
@@ -34,7 +35,6 @@ void add_groups(Analysis& out, const std::vector<Group>& groups);
 void add_external_files(Analysis& out, const std::vector<ListEntry>& names,
                         const std::vector<std::pair<u64, u64>>& spans, Bytes data, const Context& ctx);
 
-Endian read_bom(const ByteReader& r, std::size_t offset);
 void check_file_size(Analysis& out, u32 declared, std::size_t actual);
 std::size_t max_dict_entries(const ByteReader& r, std::size_t dict);
 

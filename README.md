@@ -17,6 +17,8 @@ NintendoWare, NintendoSDK, XLink2, EffectLink, SoundLink or Zstandard.
 | Sharc Archive (SARC) | Header, SFAT/SFNT validation, name hash checks |
 | Binary Cafe Resource (BFRES) | Wii U and Switch headers, embedded files, and each resource block under its own format (Binary Cafe Model, Texture, Skeletal Animation and so on) with its offset and a one-line summary |
 | Binary Nintendo Texture (BNTX) | Header and every texture: size, format, mips, dimension, tiling, channel mapping |
+| Binary Nintendo Shader (BNSH) | nn::gfx shader files: header, target API and version, code type, compiler versions, variations by source, intermediate and binary program, and code per stage. NVN files name Switch or Switch 2 from their low-level compiler version |
+| Binary Cafe Shader Archive (BFSHA) | g3d shader archives from Wii U (versions 3.4, 3.5 and 4.5) and Switch and Switch 2 (versions 3, 7 and 9): name, path, flags, and each shading model with its programs, options, attributes, samplers, uniform blocks and uniforms, and on Switch its embedded BNSH, which names the platform |
 | Binary Cafe Layout (FLYT) | Wii U and Switch: layout name, origin and size, control, texture, font and material lists, the pane tree with parts layouts, groups |
 | Binary Cafe Layout Animation (FLAN) | Wii U and Switch: tag name, frames and groups, shared animations, textures, and each animated pane or material with its animation kinds |
 | Binary Cafe Complex Font (FCPX) | The font tree: pair fonts, bitmap fonts and scalable font faces with their character ranges |

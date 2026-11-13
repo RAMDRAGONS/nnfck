@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 
+#include "formats/gfx/gfx.hpp"
 #include "formats/listing.hpp"
 
 namespace nnfck::sharc {
@@ -216,20 +217,6 @@ bool binaries_fit(const ByteReader& r, std::size_t header) {
   return size >= ArrayHeaderSize && at + size <= r.size();
 }
 
-// NVN shader binaries carry a control section opening with this magic and a
-// version word that tells the GPU generation apart.
-constexpr u32 ControlMagic = 0x98761234;
-
-struct ControlVersion {
-  u32 version;
-  std::string_view platform;
-};
-
-constexpr ControlVersion ControlVersions[] = {
-    {1, "Switch"},
-    {0xC9, "Switch 2"},
-};
-
 // The first binary's data follows its 0x10-byte entry header and points at
 // its control section with a signed offset from its own start.
 std::optional<u32> control_version(const ByteReader& r, std::size_t binaries) {
@@ -240,7 +227,7 @@ std::optional<u32> control_version(const ByteReader& r, std::size_t binaries) {
     return std::nullopt;
   const std::int64_t control = static_cast<std::int64_t>(data) + r.s32_at(data + 0xC);
   if (control < 0 || !r.has(static_cast<std::size_t>(control), 8) ||
-      r.u32_at(static_cast<std::size_t>(control)) != ControlMagic)
+      r.u32_at(static_cast<std::size_t>(control)) != gfx::NvnControlMagic)
     return std::nullopt;
   return r.u32_at(static_cast<std::size_t>(control) + 4);
 }
@@ -264,9 +251,7 @@ void analyze_binary(Bytes data, Analysis& out, const Context& ctx) {
   const std::optional<u32> control = nvn ? control_version(r, header + strings_size) : std::nullopt;
   std::optional<std::string_view> platform;
   if (control) {
-    for (const ControlVersion& c : ControlVersions)
-      if (c.version == *control)
-        platform = c.platform;
+    platform = gfx::nvn_platform(*control);
   } else if (!nvn) {
     // Only Wii U builds the compact header; its binaries hold GX2 shaders.
     platform = "Wii U";

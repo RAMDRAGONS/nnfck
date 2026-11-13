@@ -48,15 +48,6 @@ void add_external_files(Analysis& out, const std::vector<ListEntry>& names,
   }
 }
 
-Endian read_bom(const ByteReader& r, std::size_t offset) {
-  const u8 a = r.u8_at(offset), b = r.u8_at(offset + 1);
-  if (a == 0xFE && b == 0xFF)
-    return Endian::Big;
-  if (a == 0xFF && b == 0xFE)
-    return Endian::Little;
-  throw ParseError("invalid byte order mark " + fmt_hex_bytes(r.data().subspan(offset, 2)));
-}
-
 void check_file_size(Analysis& out, u32 declared, std::size_t actual) {
   if (declared != actual)
     out.warnings.push_back("BFRES declares " + fmt_hex(declared) + " bytes but holds " + fmt_hex(actual));

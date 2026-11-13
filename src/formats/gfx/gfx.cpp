@@ -24,6 +24,20 @@ constexpr const char* ImageStorageDimensions[] = {
 
 constexpr const char* TileModes[] = {"Optimal", "Linear"};
 
+constexpr const char* LowLevelApis[] = {"Common", "GL", "GX", "D3D", "NVN", "Vulkan", "Ex"};
+
+constexpr const char* ShaderCodeTypes[] = {"Binary", "IR", "Source", "Source Array"};
+
+struct NvnVersion {
+  u32 control_version;
+  std::string_view platform;
+};
+
+constexpr NvnVersion NvnVersions[] = {
+    {1, "Switch"},
+    {0xC9, "Switch 2"},
+};
+
 // Zero, One, Red, Green, Blue, Alpha.
 constexpr char ChannelSources[] = {'0', '1', 'R', 'G', 'B', 'A'};
 
@@ -59,6 +73,21 @@ std::string channel_mapping_name(Bytes mapping) {
   for (const u8 m : mapping)
     out.push_back(m < std::size(ChannelSources) ? ChannelSources[m] : '?');
   return out;
+}
+
+std::string low_level_api_name(u32 api) {
+  return lookup(LowLevelApis, api);
+}
+
+std::string shader_code_type_name(u32 type) {
+  return lookup(ShaderCodeTypes, type);
+}
+
+std::optional<std::string_view> nvn_platform(u32 control_version) {
+  for (const NvnVersion& v : NvnVersions)
+    if (v.control_version == control_version)
+      return v.platform;
+  return std::nullopt;
 }
 
 }  // namespace nnfck::gfx

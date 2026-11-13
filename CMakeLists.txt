@@ -46,6 +46,7 @@ add_library(nnfck_core STATIC
   src/core/xml.cpp
   src/formats/registry.cpp
   src/formats/listing.cpp
+  src/formats/byte_order.cpp
   src/formats/yaz/yaz.cpp
   src/formats/zstd/zstd.cpp
   src/formats/sarc/sarc.cpp
@@ -83,6 +84,8 @@ add_library(nnfck_core STATIC
   src/formats/pmaa/pmaa.cpp
   src/formats/pmaa/text.cpp
   src/formats/sharc/sharc.cpp
+  src/formats/bnsh/bnsh.cpp
+  src/formats/fsha/fsha.cpp
   src/formats/pmaa/names.cpp
 )
 target_include_directories(nnfck_core PUBLIC src)

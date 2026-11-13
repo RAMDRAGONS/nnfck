@@ -820,6 +820,136 @@ void test_shader_archives() {
   check(analyze(v9, Context{}).format == "Binary Shader Archive (Wii U)", "version 9 compact archive is Wii U");
 }
 
+void put_u64(std::vector<u8>& v, std::size_t at, u64 x) {
+  for (std::size_t i = 0; i < 8; ++i)
+    v[at + i] = static_cast<u8>(x >> (8 * i));
+}
+
+void put_u16_be(std::vector<u8>& v, std::size_t at, u16 x) {
+  v[at] = static_cast<u8>(x >> 8);
+  v[at + 1] = static_cast<u8>(x);
+}
+
+void put_u32_be(std::vector<u8>& v, std::size_t at, u32 x) {
+  for (std::size_t i = 0; i < 4; ++i)
+    v[at + i] = static_cast<u8>(x >> (24 - 8 * i));
+}
+
+// An nn::gfx shader file with one NVN variation holding a binary program
+// with vertex and pixel code, its container naming NVN control `control`.
+std::vector<u8> bnsh_file(u32 control) {
+  std::vector<u8> v(0x1A0);
+  std::copy_n("BNSH\0\0\0\0", 8, v.begin());
+  put_u32(v, 0x8, 0x00020105);
+  v[0xC] = 0xFF;
+  v[0xD] = 0xFE;
+  put_u16(v, 0x16, 0x60);
+  put_u32(v, 0x1C, static_cast<u32>(v.size()));
+  std::copy_n("grsc", 4, v.begin() + 0x60);
+  put_u16(v, 0x70, 4);
+  put_u32(v, 0x7C, 1);
+  put_u64(v, 0x80, 0xC0);
+  put_u64(v, 0x90, u64{control} << 16);
+  put_u64(v, 0xC0 + 0x10, 0x100);
+  put_u64(v, 0x100 + 0x8, 0x180);
+  put_u64(v, 0x100 + 0x28, 0x190);
+  put_u64(v, 0x100 + 0x70, 0xC0);
+  return v;
+}
+
+// A version 7 Switch shader archive with one shading model, its options,
+// attributes, samplers and uniform blocks each named by a one-entry
+// dictionary, one program, and an embedded shader file.
+std::vector<u8> bfsha_nx_file(u32 major) {
+  const std::size_t archive = 0x38, model = 0x80, dict = model + 0xE8, programs = dict + 0x28, name = programs + 0x38,
+                    shader = 0x200;
+  std::vector<u8> v(shader);
+  std::copy_n("FSHA    ", 8, v.begin());
+  put_u32(v, 0x8, major << 16);
+  v[0xC] = 0xFF;
+  v[0xD] = 0xFE;
+  put_u64(v, 0x20, archive);
+  put_u64(v, archive, name);
+  put_u64(v, archive + 0x10, model);
+  put_u64(v, archive + 0x18, dict);
+  put_u16(v, archive + 0x40, 1);
+  put_u16(v, archive + 0x42, 0xA);
+  put_u64(v, model, name);
+  for (const std::size_t slot : {2u, 4u, 6u, 8u, 10u})
+    put_u64(v, model + slot * 8, dict);
+  put_u64(v, model + 15 * 8, programs);
+  put_u64(v, model + 19 * 8, shader);
+  put_u32(v, model + 0xC8, 3);
+  put_u16(v, model + 0xD4, 1);
+  put_u16(v, model + 0xD6, 1);
+  put_u16(v, model + 0xD8, 1);
+  put_u32(v, dict + 4, 1);
+  put_u16(v, name, 1);
+  v[name + 2] = 'M';
+  const std::vector<u8> b = bnsh_file(0xC9);
+  v.insert(v.end(), b.begin(), b.end());
+  put_u32(v, 0x1C, static_cast<u32>(v.size()));
+  return v;
+}
+
+// A Wii U shader archive with one shading model. Version 3.5 keeps the
+// dictionary offset where 3.4 stores its ABI version, and places the model's
+// uniform count and name one word later.
+std::vector<u8> bfsha_cafe_file(u8 minor) {
+  const bool v35 = minor == 5;
+  const std::size_t dict_field = v35 ? 0x28 : 0x2C, uniforms = v35 ? 0x18 : 0x14, name = v35 ? 0x24 : 0x20;
+  std::vector<u8> v(0x90);
+  std::copy_n("FSHA", 4, v.begin());
+  v[4] = 3;
+  v[5] = minor;
+  v[7] = 3;
+  put_u16_be(v, 0x8, 0xFEFF);
+  put_u16_be(v, 0xA, 0x10);
+  put_u32_be(v, 0xC, static_cast<u32>(v.size()));
+  put_u32_be(v, 0x10, 0x100);
+  put_u32_be(v, 0x14, 0x88 - 0x14);
+  put_u16_be(v, 0x24, 1);
+  put_u32_be(v, dict_field, static_cast<u32>(0x34 - dict_field));
+  put_u32_be(v, 0x34, 0x28);
+  put_u32_be(v, 0x38, 1);
+  put_u32_be(v, 0x4C + 0x8, 0x88 - (0x4C + 0x8));
+  put_u32_be(v, 0x4C + 0xC, 0x60 - (0x4C + 0xC));
+  put_u16_be(v, 0x60 + 0x2, 3);
+  put_u16_be(v, 0x60 + 0x6, 10);
+  v[0x60 + 0x8] = 8;
+  put_u32_be(v, 0x60 + uniforms, 4);
+  put_u32_be(v, 0x60 + name, static_cast<u32>(0x88 - (0x60 + name)));
+  v[0x88] = 'M';
+  return v;
+}
+
+void test_shader_files() {
+  const Analysis b = analyze(bnsh_file(1), Context{});
+  check(b.format == "Binary Nintendo Shader (Switch)" && b.errors.empty() && b.warnings.empty() &&
+            field(b, "Library") == "NintendoSDK" && field(b, "Shader Variations") == "1 variation (1 binary)" &&
+            field(b, "Stage Code") == "1 vertex, 1 pixel",
+        "BNSH shader file counts its variations and stages");
+  check(analyze(bnsh_file(0xC9), Context{}).format == "Binary Nintendo Shader (Switch 2)",
+        "Switch 2 BNSH is told apart by its low-level compiler version");
+
+  const Analysis nx = analyze(bfsha_nx_file(7), Context{});
+  check(nx.format == "Binary Cafe Shader Archive (Switch 2)" && nx.errors.empty() && nx.warnings.empty() &&
+            field(nx, "Library") == "NintendoWare" &&
+            has_row(nx, "M: 1 program, 1 static option, 1 dynamic option, 1 attribute, 1 sampler, 1 uniform block, "
+                        "3 uniforms, NVN, 1 variation (1 binary)"),
+        "Switch shader archive lists its shading models and embedded shader file");
+  check(analyze(bfsha_nx_file(5), Context{}).warnings.size() == 1, "unknown Switch shader archive version is reported");
+
+  for (const u8 minor : {u8{4}, u8{5}}) {
+    const Analysis cafe = analyze(bfsha_cafe_file(minor), Context{});
+    check(cafe.format == "Binary Cafe Shader Archive (Wii U)" && cafe.errors.empty() && cafe.warnings.empty() &&
+              field(cafe, "Name") == "M" && field(cafe, "Version") == "3." + std::to_string(minor) + ".0.3" &&
+              has_row(cafe, "M: 10 programs, 3 static options, 0 dynamic options, 8 attributes, 0 samplers, "
+                            "0 uniform blocks, 4 uniforms"),
+          "Wii U shader archive version 3." + std::to_string(minor) + " lists its shading models");
+  }
+}
+
 // A 3DS SPBD effect binary: one emitter set holding one complex emitter.
 // Version 51 adds shader and primitive tables, each a bare entry count.
 std::vector<u8> spbd_file(u32 version, u32 emitter_table) {
@@ -1168,6 +1298,7 @@ int main(int argc, char** argv) {
   test_link_databases();
   test_spbd();
   test_shader_archives();
+  test_shader_files();
   test_layouts();
   test_layout_sources();
   test_intermediates();
