@@ -1156,7 +1156,7 @@ void test_parameter_archives() {
   check(unknown.errors.empty() && unknown.warnings.size() == 1, "unknown parameter archive version shows its header");
 
   const Analysis v1 = analyze(pmaa1_file(), Context{});
-  check(v1.errors.empty() && v1.warnings.empty() && field(v1, "Extension") == "Binary Gsys Shadow (.bgsdw)" &&
+  check(v1.errors.empty() && v1.warnings.empty() && field(v1, "Extension") == "Binary GSys Shadow (.bgsdw)" &&
             field(v1, "Parameters") == "1" && has_row(v1, "global_parameter: 1 parameter"),
         "well-formed version 1 parameter archive is clean");
   check(!analyze(pmaa1_file(0x40), Context{}).errors.empty(), "version 1 node past its parent is rejected");
